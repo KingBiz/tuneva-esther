@@ -4734,17 +4734,30 @@
       "lastTapAt": 1795041362819
     },
     "USER-4358a7fa263e0de0a91af606": {
-      "balance": 0,
+      "balance": 1750,
       "todayDate": "2026-11-18",
-      "todayEarnings": 0,
+      "todayEarnings": 1750,
       "tapPoints": 0,
       "tapCount": 0,
       "tapDailyPoints": 0,
       "tapDailyEarnings": 0,
-      "videoEarnings": 0,
-      "claimedVideos": [],
-      "processedEvents": [],
-      "history": [],
+      "videoEarnings": 1750,
+      "claimedVideos": [
+        "bigger-escapes"
+      ],
+      "processedEvents": [
+        "38dd2225-8847-4039-a11f-e9744f72bb9e"
+      ],
+      "history": [
+        {
+          "id": "38dd2225-8847-4039-a11f-e9744f72bb9e",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Escapes",
+          "amount": 1750,
+          "date": "2026-11-18T22:43:25.165Z",
+          "currency": "NGN"
+        }
+      ],
       "lastTapAt": 0
     },
     "USER-bfab02c4b4135697e5b86643": {
