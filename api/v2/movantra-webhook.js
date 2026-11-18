@@ -21,7 +21,11 @@ const FILES = {
 
 const TIME_ZONE = "Africa/Lagos";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const TUNEVA_ACTIVATION_KOBO = 530000;
+
+const TUNEVA_ACTIVATION_AMOUNTS_KOBO = [
+  530000,
+  930000
+];
 
 /* =====================================================
    RESPONSE
@@ -321,7 +325,7 @@ async function removeTemporaryPasswordHash(id) {
     : [];
 
   const index = payments.findIndex(payment =>
-    String(payment.id || "") === id
+    paymentId(payment) === id
   );
 
   if (index === -1) {
@@ -546,11 +550,11 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /* ENFORCE TUNEVA ACTIVATION AMOUNT */
+    /* ENFORCE TUNEVA ACTIVATION AMOUNTS */
 
     if (
       payment.activation === true &&
-      amountKobo !== TUNEVA_ACTIVATION_KOBO
+      !TUNEVA_ACTIVATION_AMOUNTS_KOBO.includes(amountKobo)
     ) {
       console.error(
         "[TUNEVA MOVANTRA] Invalid activation amount:",
