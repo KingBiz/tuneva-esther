@@ -1,13 +1,13 @@
 {
   "users": {
     "USER-9f557f5d17362e7b9b9ce452": {
-      "balance": 3500,
+      "balance": 3600,
       "todayDate": "2026-11-18",
-      "todayEarnings": 3500,
-      "tapPoints": 0,
-      "tapCount": 0,
-      "tapDailyPoints": 0,
-      "tapDailyEarnings": 0,
+      "todayEarnings": 3600,
+      "tapPoints": 350,
+      "tapCount": 1,
+      "tapDailyPoints": 350,
+      "tapDailyEarnings": 100,
       "videoEarnings": 3500,
       "claimedVideos": [
         "bigger-fun",
@@ -15,9 +15,18 @@
       ],
       "processedEvents": [
         "4e5ecd55-abd7-40f0-afff-9f68c09bb089",
-        "24aa83d3-3a40-41ef-a3fa-69216e7d3bbe"
+        "24aa83d3-3a40-41ef-a3fa-69216e7d3bbe",
+        "57c7c259-e800-47dd-9126-2a00760097c4"
       ],
       "history": [
+        {
+          "id": "57c7c259-e800-47dd-9126-2a00760097c4",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-18T20:55:32.912Z",
+          "currency": "NGN"
+        },
         {
           "id": "24aa83d3-3a40-41ef-a3fa-69216e7d3bbe",
           "title": "Video Rewards",
@@ -35,7 +44,7 @@
           "currency": "NGN"
         }
       ],
-      "lastTapAt": 0
+      "lastTapAt": 1795035332912
     },
     "USER-b3215fe3794596590772c42e": {
       "balance": 0,
