@@ -16,7 +16,13 @@ const {
 const PAYMENTS_FILE = "data/payments.json";
 const USERS_FILE = "data/users.json";
 
-const ACTIVATION_AMOUNT_KOBO = 530000;
+const DEFAULT_ACTIVATION_AMOUNT_KOBO = 530000;
+
+const ALLOWED_ACTIVATION_AMOUNTS_KOBO = [
+  530000,
+  930000
+];
+
 const ACTIVATION_EXPIRY_MINUTES = 50;
 
 function send(res, status, data) {
@@ -119,22 +125,32 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* =====================================
+       ACTIVATION AMOUNT VALIDATION
+    ===================================== */
+
     const suppliedAmount = body.amount_kobo !== undefined
       ? Number(body.amount_kobo)
       : body.amount !== undefined
         ? Math.round(Number(body.amount) * 100)
-        : ACTIVATION_AMOUNT_KOBO;
+        : DEFAULT_ACTIVATION_AMOUNT_KOBO;
 
     if (
       !Number.isSafeInteger(suppliedAmount) ||
-      suppliedAmount !== ACTIVATION_AMOUNT_KOBO
+      !ALLOWED_ACTIVATION_AMOUNTS_KOBO.includes(suppliedAmount)
     ) {
       return send(res, 400, {
         status: false,
         code: "invalid_activation_amount",
-        message: "Tuneva activation costs exactly NGN 5,300."
+        message: "Choose a valid Tuneva activation price: NGN 5,300 or NGN 9,300."
       });
     }
+
+    const activationAmountKobo = suppliedAmount;
+
+    /* =====================================
+       LOAD EXISTING DATA
+    ===================================== */
 
     const [userFile, paymentFile] = await Promise.all([
       readJSON(USERS_FILE, { users: [] }),
@@ -148,6 +164,10 @@ module.exports = async function handler(req, res) {
     const payments = Array.isArray(paymentFile.data?.payments)
       ? paymentFile.data.payments
       : [];
+
+    /* =====================================
+       CHECK EXISTING ACCOUNTS
+    ===================================== */
 
     const usernameExists = users.some(user =>
       normalizeUsername(user.username) === username
@@ -173,12 +193,20 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* =====================================
+       HASH PASSWORD
+    ===================================== */
+
     const passwordHash = await hashPassword(password);
+
+    /* =====================================
+       CREATE MOVANTRA PAYMENT ACCOUNT
+    ===================================== */
 
     const reference = makeReference();
 
     const movantraBody = {
-      amount_kobo: ACTIVATION_AMOUNT_KOBO,
+      amount_kobo: activationAmountKobo,
       customer_name: customerName,
       customer_email: customerEmail,
       reference,
@@ -248,6 +276,10 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* =====================================
+       CREATE PAYMENT RECORD
+    ===================================== */
+
     const paymentId = makePaymentId();
     const statusToken = makeStatusToken();
     const createdAt = new Date().toISOString();
@@ -260,8 +292,8 @@ module.exports = async function handler(req, res) {
       phone: customerPhone,
       passwordHash,
 
-      amount: ACTIVATION_AMOUNT_KOBO / 100,
-      amountKobo: ACTIVATION_AMOUNT_KOBO,
+      amount: activationAmountKobo / 100,
+      amountKobo: activationAmountKobo,
 
       method: "paga",
       provider: "movantra",
@@ -298,6 +330,10 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* =====================================
+       SAVE PAYMENT
+    ===================================== */
+
     await writeJSON(
       PAYMENTS_FILE,
       {
@@ -307,6 +343,10 @@ module.exports = async function handler(req, res) {
       paymentFile.sha
     );
 
+    /* =====================================
+       RETURN PAYMENT DETAILS
+    ===================================== */
+
     return send(res, 200, {
       status: true,
       paymentId,
@@ -315,7 +355,7 @@ module.exports = async function handler(req, res) {
       account_number: result.account_number,
       account_name: result.account_name,
       bank_name: result.bank_name,
-      amount_kobo: ACTIVATION_AMOUNT_KOBO,
+      amount_kobo: activationAmountKobo,
       fee_kobo: result.fee_kobo ?? null,
       net_kobo: result.net_kobo ?? null,
       status_text: result.status_text || "pending",
