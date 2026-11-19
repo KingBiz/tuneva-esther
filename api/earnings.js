@@ -22,6 +22,8 @@ const TAP_REWARD = 100;
 const DAILY_TAP_LIMIT = 3000;
 
 const VIDEO_REWARD = 1750;
+const MAX_BATCH_SIZE = 100;
+const MAX_SAVE_ATTEMPTS = 4;
 
 const VIDEO_REWARDS = {
   "seyi-vibes": {
@@ -112,7 +114,10 @@ function resetDailyIfNeeded(account) {
     account.todayEarnings = 0;
     account.tapDailyPoints = 0;
     account.tapDailyEarnings = 0;
+    return true;
   }
+
+  return false;
 }
 
 function publicAccount(account) {
@@ -129,6 +134,207 @@ function publicAccount(account) {
     claimedVideos: account.claimedVideos,
     history: account.history
   };
+}
+
+function validEventId(value) {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 100 &&
+    /^[a-zA-Z0-9_-]+$/.test(value)
+  );
+}
+
+function isGitHubConflict(error) {
+  return /(?:409|422)/.test(String(error.message || ""));
+}
+
+function normalizeEvents(body) {
+  if (Array.isArray(body.events)) {
+    return body.events;
+  }
+
+  // Backward compatibility with existing single-event requests.
+  if (body.action) {
+    return [{
+      eventId: body.eventId,
+      action: body.action,
+      videoId: body.videoId
+    }];
+  }
+
+  return [];
+}
+
+function processBatch(account, events) {
+  const processed = new Set(account.processedEvents);
+
+  const result = {
+    accepted: 0,
+    duplicates: 0,
+    rejected: 0,
+    limitReached: false
+  };
+
+  const seenInBatch = new Set();
+
+  for (const event of events) {
+    if (
+      !event ||
+      typeof event !== "object" ||
+      !validEventId(event.eventId) ||
+      !["tap", "video"].includes(event.action)
+    ) {
+      result.rejected++;
+      continue;
+    }
+
+    const eventId = event.eventId;
+
+    if (
+      processed.has(eventId) ||
+      seenInBatch.has(eventId)
+    ) {
+      result.duplicates++;
+      continue;
+    }
+
+    seenInBatch.add(eventId);
+
+    if (event.action === "tap") {
+      if (
+        account.tapDailyEarnings + TAP_REWARD >
+        DAILY_TAP_LIMIT
+      ) {
+        result.limitReached = true;
+        result.rejected++;
+        continue;
+      }
+
+      account.tapPoints += TAP_POINTS;
+      account.tapCount += 1;
+
+      account.tapDailyPoints += TAP_POINTS;
+      account.tapDailyEarnings += TAP_REWARD;
+
+      account.balance += TAP_REWARD;
+      account.todayEarnings += TAP_REWARD;
+
+      account.history.unshift({
+        id: eventId,
+        title: "Tap Rewards",
+        subtitle: "Tap Tap",
+        amount: TAP_REWARD,
+        date: new Date().toISOString(),
+        currency: "NGN"
+      });
+
+    } else if (event.action === "video") {
+      const videoId = String(event.videoId || "");
+      const video = VIDEO_REWARDS[videoId];
+
+      if (!video || account.claimedVideos.includes(videoId)) {
+        result.rejected++;
+        continue;
+      }
+
+      account.claimedVideos.push(videoId);
+
+      account.videoEarnings += video.reward;
+      account.balance += video.reward;
+      account.todayEarnings += video.reward;
+
+      account.history.unshift({
+        id: eventId,
+        title: "Video Rewards",
+        subtitle: video.title,
+        amount: video.reward,
+        date: new Date().toISOString(),
+        currency: "NGN"
+      });
+    }
+
+    account.processedEvents.push(eventId);
+    processed.add(eventId);
+
+    result.accepted++;
+  }
+
+  account.processedEvents =
+    account.processedEvents.slice(-5000);
+
+  account.history =
+    account.history.slice(0, 500);
+
+  return result;
+}
+
+async function saveBatchWithRetry(userId, events) {
+  let lastError;
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_SAVE_ATTEMPTS;
+    attempt++
+  ) {
+    try {
+      const earningsResult = await readJSON(
+        EARNINGS_FILE,
+        { users: {} }
+      );
+
+      const database =
+        earningsResult.data &&
+        typeof earningsResult.data === "object"
+          ? earningsResult.data
+          : { users: {} };
+
+      if (
+        !database.users ||
+        typeof database.users !== "object"
+      ) {
+        database.users = {};
+      }
+
+      const account = normalizeAccount(
+        database.users[userId]
+      );
+
+      resetDailyIfNeeded(account);
+
+      const batchResult = processBatch(account, events);
+
+      database.users[userId] = account;
+
+      await writeJSON(
+        EARNINGS_FILE,
+        database,
+        earningsResult.sha
+      );
+
+      return {
+        ...batchResult,
+        earnings: publicAccount(account)
+      };
+
+    } catch (error) {
+      lastError = error;
+
+      if (
+        !isGitHubConflict(error) ||
+        attempt === MAX_SAVE_ATTEMPTS
+      ) {
+        throw error;
+      }
+
+      console.warn(
+        "[TUNEVA EARNINGS] GitHub conflict. Retrying:",
+        attempt
+      );
+    }
+  }
+
+  throw lastError;
 }
 
 module.exports = async function handler(req, res) {
@@ -161,7 +367,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // SUPPORT PERSISTENT BROWSER TOKEN AND EXISTING COOKIE
+    // AUTHENTICATION
 
     const bearerToken = getBearerToken(req);
 
@@ -209,8 +415,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // CHECK TOKEN VERSION FOR PERSISTENT SESSIONS
-
     if (
       persistentSession &&
       Number(user.sessionVersion || 1) !== session.v
@@ -221,40 +425,46 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const earningsResult = await readJSON(
-      EARNINGS_FILE,
-      { users: {} }
-    );
-
-    const database =
-      earningsResult.data &&
-      typeof earningsResult.data === "object"
-        ? earningsResult.data
-        : { users: {} };
-
-    if (
-      !database.users ||
-      typeof database.users !== "object"
-    ) {
-      database.users = {};
-    }
-
-    let account = normalizeAccount(
-      database.users[user.id]
-    );
-
-    resetDailyIfNeeded(account);
-
-    // GET ACCOUNT EARNINGS
+    // GET: READ ONLY UNLESS DAILY RESET IS REQUIRED
 
     if (req.method === "GET") {
-      database.users[user.id] = account;
-
-      await writeJSON(
+      const earningsResult = await readJSON(
         EARNINGS_FILE,
-        database,
-        earningsResult.sha
+        { users: {} }
       );
+
+      const database =
+        earningsResult.data &&
+        typeof earningsResult.data === "object"
+          ? earningsResult.data
+          : { users: {} };
+
+      const exists =
+        database.users &&
+        Object.prototype.hasOwnProperty.call(
+          database.users,
+          user.id
+        );
+
+      const account = normalizeAccount(
+        exists ? database.users[user.id] : null
+      );
+
+      const wasReset = resetDailyIfNeeded(account);
+
+      if (exists && wasReset) {
+        if (!database.users || typeof database.users !== "object") {
+          database.users = {};
+        }
+
+        database.users[user.id] = account;
+
+        await writeJSON(
+          EARNINGS_FILE,
+          database,
+          earningsResult.sha
+        );
+      }
 
       return send(res, 200, {
         ok: true,
@@ -262,143 +472,50 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // POST EARNINGS ACTION
+    // POST: BATCH EARNINGS
 
     const body = req.body || {};
-
-    const action = String(body.action || "");
-    const eventId = String(body.eventId || "");
+    const events = normalizeEvents(body);
 
     if (
-      !eventId ||
-      eventId.length > 100 ||
-      !/^[a-zA-Z0-9_-]+$/.test(eventId)
+      !events.length ||
+      events.length > MAX_BATCH_SIZE
     ) {
       return send(res, 400, {
         ok: false,
-        message: "A valid event ID is required."
+        message: "Submit between 1 and 100 reward events."
       });
     }
 
-    // PREVENT DUPLICATE EVENTS
-
-    if (account.processedEvents.includes(eventId)) {
-      return send(res, 200, {
-        ok: true,
-        duplicate: true,
-        earnings: publicAccount(account)
-      });
-    }
-
-    // TAP REWARDS
-
-    if (action === "tap") {
+    for (const event of events) {
       if (
-        account.tapDailyEarnings + TAP_REWARD >
-        DAILY_TAP_LIMIT
+        !event ||
+        typeof event !== "object" ||
+        !validEventId(event.eventId) ||
+        !["tap", "video"].includes(event.action)
       ) {
-        return send(res, 200, {
-          ok: true,
-          limitReached: true,
-          message: "You have reached your daily Tap Tap earnings limit of ₦3,000.",
-          earnings: publicAccount(account)
-        });
-      }
-
-      const now = Date.now();
-
-      if (now - Number(account.lastTapAt || 0) < 200) {
-        return send(res, 429, {
-          ok: false,
-          message: "Please slow down and try again."
-        });
-      }
-
-      account.lastTapAt = now;
-
-      account.tapPoints += TAP_POINTS;
-      account.tapCount += 1;
-
-      account.tapDailyPoints += TAP_POINTS;
-      account.tapDailyEarnings += TAP_REWARD;
-
-      account.balance += TAP_REWARD;
-      account.todayEarnings += TAP_REWARD;
-
-      account.history.unshift({
-        id: eventId,
-        title: "Tap Rewards",
-        subtitle: "Tap Tap",
-        amount: TAP_REWARD,
-        date: new Date().toISOString(),
-        currency: "NGN"
-      });
-    }
-
-    // VIDEO REWARDS
-
-    else if (action === "video") {
-      const videoId = String(body.videoId || "");
-      const video = VIDEO_REWARDS[videoId];
-
-      if (!video) {
         return send(res, 400, {
           ok: false,
-          message: "Unknown video reward."
+          message: "Invalid reward event in batch."
         });
       }
-
-      if (account.claimedVideos.includes(videoId)) {
-        return send(res, 409, {
-          ok: false,
-          message: "This video reward has already been claimed."
-        });
-      }
-
-      account.claimedVideos.push(videoId);
-
-      account.videoEarnings += video.reward;
-      account.balance += video.reward;
-      account.todayEarnings += video.reward;
-
-      account.history.unshift({
-        id: eventId,
-        title: "Video Rewards",
-        subtitle: video.title,
-        amount: video.reward,
-        date: new Date().toISOString(),
-        currency: "NGN"
-      });
     }
 
-    else {
-      return send(res, 400, {
-        ok: false,
-        message: "Invalid earnings action."
-      });
-    }
-
-    // SAVE PROCESSED EVENT
-
-    account.processedEvents.push(eventId);
-
-    account.processedEvents =
-      account.processedEvents.slice(-1000);
-
-    account.history =
-      account.history.slice(0, 500);
-
-    database.users[user.id] = account;
-
-    await writeJSON(
-      EARNINGS_FILE,
-      database,
-      earningsResult.sha
+    const result = await saveBatchWithRetry(
+      user.id,
+      events
     );
 
     return send(res, 200, {
       ok: true,
-      earnings: publicAccount(account)
+      accepted: result.accepted,
+      duplicates: result.duplicates,
+      rejected: result.rejected,
+      limitReached: result.limitReached,
+      message: result.limitReached
+        ? "Your daily Tap Tap earnings limit has been reached."
+        : undefined,
+      earnings: result.earnings
     });
 
   } catch (error) {
