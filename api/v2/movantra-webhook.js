@@ -22,10 +22,6 @@ const FILES = {
 const TIME_ZONE = "Africa/Lagos";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-const TUNEVA_ACTIVATION_AMOUNTS_KOBO = [
-  530000,
-  930000
-];
 
 /* =====================================================
    RESPONSE
@@ -612,22 +608,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /* ENFORCE TUNEVA ACTIVATION AMOUNTS */
-
-    if (
-      payment.activation === true &&
-      !TUNEVA_ACTIVATION_AMOUNTS_KOBO.includes(amountKobo)
-    ) {
-      console.error(
-        "[TUNEVA MOVANTRA] Invalid activation amount:",
-        reference
-      );
-
-      return send(res, 400, {
-        status: false,
-        message: "Invalid Tuneva activation amount."
-      });
-    }
 
     const currentStatus = String(
       payment.status || "pending"
