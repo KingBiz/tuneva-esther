@@ -20632,16 +20632,17 @@
       "lastTapAt": 0
     },
     "USER-8d850d88b4902463d974c63a": {
-      "balance": 4750,
+      "balance": 6500,
       "todayDate": "2026-11-19",
-      "todayEarnings": 4750,
+      "todayEarnings": 6500,
       "tapPoints": 10500,
       "tapCount": 30,
       "tapDailyPoints": 10500,
       "tapDailyEarnings": 3000,
-      "videoEarnings": 1750,
+      "videoEarnings": 3500,
       "claimedVideos": [
-        "bigger-escapes"
+        "bigger-escapes",
+        "bigger-fun"
       ],
       "processedEvents": [
         "41aec02a-0566-4ce0-b27e-27410420ee80",
@@ -20674,9 +20675,18 @@
         "bfdff80f-aecd-4d3f-b825-e24774b0315b",
         "f57a1687-ba1b-4fe8-96e3-e5f5670894d1",
         "788b0235-2e3b-4b2b-827b-390c4bbb1691",
-        "eca8ab2e-6957-4b71-bee8-cb360df65aea"
+        "eca8ab2e-6957-4b71-bee8-cb360df65aea",
+        "c9a1ab00-1c04-4ae7-9d91-1cffb69b3852"
       ],
       "history": [
+        {
+          "id": "c9a1ab00-1c04-4ae7-9d91-1cffb69b3852",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Fun",
+          "amount": 1750,
+          "date": "2026-11-19T06:45:14.073Z",
+          "currency": "NGN"
+        },
         {
           "id": "eca8ab2e-6957-4b71-bee8-cb360df65aea",
           "title": "Video Rewards",
