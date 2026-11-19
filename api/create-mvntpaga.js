@@ -15,14 +15,9 @@ const {
 
 const PAYMENTS_FILE = "data/payments.json";
 const USERS_FILE = "data/users.json";
+const SETTINGS_FILE = "data/admin-settings.json";
 
-const DEFAULT_ACTIVATION_AMOUNT_KOBO = 530000;
-
-const ALLOWED_ACTIVATION_AMOUNTS_KOBO = [
-  530000,
-  930000
-];
-
+const DEFAULT_ACTIVATION_PRICES = [5300, 9300];
 const ACTIVATION_EXPIRY_MINUTES = 50;
 
 function send(res, status, data) {
@@ -58,6 +53,25 @@ function normalizePhone(phone) {
   }
 
   return value;
+}
+
+function getActivationPrices(settings) {
+  const prices = settings?.activationPrices;
+
+  if (
+    Array.isArray(prices) &&
+    prices.length === 2 &&
+    prices.every(value =>
+      Number.isSafeInteger(value) &&
+      value >= 100 &&
+      value <= 1000000
+    ) &&
+    prices[0] !== prices[1]
+  ) {
+    return prices;
+  }
+
+  return DEFAULT_ACTIVATION_PRICES;
 }
 
 module.exports = async function handler(req, res) {
@@ -135,32 +149,43 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /* =====================================
-       ACTIVATION AMOUNT VALIDATION
-    ===================================== */
+    /* LOAD ADMIN ACTIVATION PRICES */
+
+    const settingsResult = await readJSON(
+      SETTINGS_FILE,
+      {}
+    );
+
+    const activationPrices = getActivationPrices(
+      settingsResult.data
+    );
+
+    const allowedAmountsKobo = activationPrices.map(
+      amount => amount * 100
+    );
+
+    /* VALIDATE SELECTED ACTIVATION PRICE */
 
     const suppliedAmount = body.amount_kobo !== undefined
       ? Number(body.amount_kobo)
       : body.amount !== undefined
         ? Math.round(Number(body.amount) * 100)
-        : DEFAULT_ACTIVATION_AMOUNT_KOBO;
+        : allowedAmountsKobo[0];
 
     if (
       !Number.isSafeInteger(suppliedAmount) ||
-      !ALLOWED_ACTIVATION_AMOUNTS_KOBO.includes(suppliedAmount)
+      !allowedAmountsKobo.includes(suppliedAmount)
     ) {
       return send(res, 400, {
         status: false,
         code: "invalid_activation_amount",
-        message: "Choose a valid Tuneva activation price: NGN 5,300 or NGN 9,300."
+        message: "Choose a valid Tuneva activation price."
       });
     }
 
     const activationAmountKobo = suppliedAmount;
 
-    /* =====================================
-       LOAD EXISTING DATA
-    ===================================== */
+    /* LOAD EXISTING DATA */
 
     const [userFile, paymentFile] = await Promise.all([
       readJSON(USERS_FILE, { users: [] }),
@@ -175,12 +200,7 @@ module.exports = async function handler(req, res) {
       ? paymentFile.data.payments
       : [];
 
-    /* =====================================
-       CHECK ACTIVATED ACCOUNTS ONLY
-
-       Pending payment records do not reserve
-       usernames, emails or phone numbers.
-    ===================================== */
+    /* CHECK ACTIVATED ACCOUNTS ONLY */
 
     const customerPhoneNormalized = normalizePhone(customerPhone);
 
@@ -214,15 +234,11 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /* =====================================
-       HASH PASSWORD
-    ===================================== */
+    /* HASH PASSWORD */
 
     const passwordHash = await hashPassword(password);
 
-    /* =====================================
-       CREATE MOVANTRA PAYMENT ACCOUNT
-    ===================================== */
+    /* CREATE MOVANTRA PAYMENT ACCOUNT */
 
     const reference = makeReference();
 
@@ -297,9 +313,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /* =====================================
-       CREATE PAYMENT RECORD
-    ===================================== */
+    /* CREATE PAYMENT RECORD */
 
     const paymentId = makePaymentId();
     const statusToken = makeStatusToken();
@@ -351,9 +365,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /* =====================================
-       SAVE PAYMENT
-    ===================================== */
+    /* SAVE PAYMENT */
 
     await writeJSON(
       PAYMENTS_FILE,
@@ -364,9 +376,7 @@ module.exports = async function handler(req, res) {
       paymentFile.sha
     );
 
-    /* =====================================
-       RETURN PAYMENT DETAILS
-    ===================================== */
+    /* RETURN PAYMENT DETAILS */
 
     return send(res, 200, {
       status: true,
@@ -385,7 +395,7 @@ module.exports = async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("[TUNEVA] Payment creation error:", error);
+    console.error("[TUNEVA ACCOUNT CREATION]", error);
 
     return send(res, 500, {
       status: false,
