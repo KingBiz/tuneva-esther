@@ -1,234 +1,415 @@
 
-const {
-  readJSON,
-  writeJSON
-} = require("../lib/github-storage");
+(function () {
+  "use strict";
 
-const SETTINGS_FILE = "data/admin-settings.json";
-const USERS_FILE = "data/users.json";
-const PAYMENTS_FILE = "data/payments.json";
+  const API = "https://api.tunevaweb.com.ng/api/admin";
 
-const DEFAULT_SETTINGS = {
-  activationPrices: [5300, 9300],
-  tapPoints: 350,
-  tapReward: 100,
-  dailyTapLimit: 3000,
-  videoReward: 1750
-};
+  const loginScreen = document.getElementById("ta-login");
+  const mainScreen = document.getElementById("ta-main");
 
-function send(res, status, data) {
-  return res.status(status).json(data);
-}
+  const settingsForm = document.getElementById("ta-settings-form");
+  const settingsButton = document.getElementById("ta-save-settings");
+  const settingsMessage = document.getElementById("ta-settings-message");
 
-function getData(result, key) {
-  const data = result && result.data;
+  const logoutButton = document.getElementById("ta-logout");
+  const refreshButton = document.getElementById("ta-refresh");
 
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.[key])) return data[key];
+  const accountsList = document.getElementById("ta-accounts-list");
+  const accountCount = document.getElementById("ta-account-count");
 
-  return [];
-}
+  const fields = {
+    priceOne: document.getElementById("ta-price-one"),
+    priceTwo: document.getElementById("ta-price-two"),
+    tapPoints: document.getElementById("ta-tap-points"),
+    tapReward: document.getElementById("ta-tap-reward"),
+    dailyLimit: document.getElementById("ta-daily-limit"),
+    videoReward: document.getElementById("ta-video-reward")
+  };
 
-function validAmount(value, min, max) {
-  return (
-    Number.isSafeInteger(value) &&
-    value >= min &&
-    value <= max
-  );
-}
+  const DEFAULT_SETTINGS = {
+    activationPrices: [5300, 9300],
+    tapPoints: 350,
+    tapReward: 100,
+    dailyTapLimit: 3000,
+    videoReward: 1750
+  };
 
-function validateSettings(body) {
-  if (!body || typeof body !== "object") return null;
+  let requestInProgress = false;
 
-  const prices = body.activationPrices;
+  // =================================
+  // SHOW DASHBOARD IMMEDIATELY
+  // =================================
 
-  if (
-    !Array.isArray(prices) ||
-    prices.length !== 2 ||
-    !prices.every(value => validAmount(value, 100, 1000000)) ||
-    prices[0] === prices[1]
-  ) {
-    return null;
+  if (loginScreen) {
+    loginScreen.hidden = true;
+    loginScreen.style.display = "none";
   }
 
-  if (!validAmount(body.tapPoints, 1, 1000000)) return null;
-  if (!validAmount(body.tapReward, 1, 1000000)) return null;
-  if (!validAmount(body.dailyTapLimit, 1, 100000000)) return null;
-  if (!validAmount(body.videoReward, 1, 1000000)) return null;
+  if (mainScreen) {
+    mainScreen.hidden = false;
+  }
 
-  return {
-    activationPrices: prices,
-    tapPoints: body.tapPoints,
-    tapReward: body.tapReward,
-    dailyTapLimit: body.dailyTapLimit,
-    videoReward: body.videoReward
-  };
-}
+  // =================================
+  // MESSAGES
+  // =================================
 
-function findPaymentForUser(user, payments) {
-  const paymentId = String(
-    user.paymentId || user.paymentID || ""
-  );
+  function setMessage(element, message, type) {
+    if (!element) return;
 
-  const reference = String(
-    user.paymentReference || user.reference || ""
-  );
+    element.textContent = message || "";
+    element.classList.remove("success", "error");
 
-  return payments.find(payment => {
-    if (
-      String(payment.status || "").toLowerCase() !== "approved" ||
-      payment.activation !== true
-    ) {
-      return false;
+    if (type) {
+      element.classList.add(type);
+    }
+  }
+
+  // =================================
+  // API REQUESTS
+  // =================================
+
+  async function apiRequest(method, body) {
+    const response = await fetch(API, {
+      method: method,
+      headers: {
+        Accept: "application/json",
+        ...(body ? {
+          "Content-Type": "application/json"
+        } : {})
+      },
+      cache: "no-store",
+      body: body ? JSON.stringify(body) : undefined
+    });
+
+    let result;
+
+    try {
+      result = await response.json();
+    } catch (_) {
+      throw new Error("Invalid response from the admin server.");
     }
 
-    if (
-      paymentId &&
-      String(payment.id || "") === paymentId
-    ) {
-      return true;
+    if (!response.ok || !result || result.ok !== true) {
+      throw new Error(
+        result?.message ||
+        "The admin request could not be completed."
+      );
     }
 
-    if (
-      reference &&
-      String(payment.reference || "") === reference
-    ) {
-      return true;
-    }
+    return result;
+  }
+
+  // =================================
+  // SETTINGS
+  // =================================
+
+  function validNumber(value, minimum, maximum) {
+    const number = Number(value);
 
     return (
-      String(payment.username || "").toLowerCase() ===
-        String(user.username || "").toLowerCase() &&
-      String(payment.email || "").toLowerCase() ===
-        String(user.email || "").toLowerCase()
+      Number.isSafeInteger(number) &&
+      number >= minimum &&
+      number <= maximum
     );
-  });
-}
-
-module.exports = async function handler(req, res) {
-  const allowedOrigin =
-    process.env.TUNEVA_ADMIN_ORIGIN ||
-    process.env.TUNEVA_FRONTEND_ORIGIN;
-
-  const origin = req.headers.origin;
-
-  if (allowedOrigin && origin && origin !== allowedOrigin) {
-    return send(res, 403, {
-      ok: false,
-      message: "Origin not allowed."
-    });
   }
 
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    allowedOrigin || "*"
-  );
+  function populateSettings(settings) {
+    const prices = Array.isArray(settings.activationPrices)
+      ? settings.activationPrices
+      : DEFAULT_SETTINGS.activationPrices;
 
-  res.setHeader("Vary", "Origin");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type"
-  );
-  res.setHeader("Cache-Control", "no-store");
+    fields.priceOne.value = prices[0];
+    fields.priceTwo.value = prices[1];
 
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
+    fields.tapPoints.value =
+      settings.tapPoints ?? DEFAULT_SETTINGS.tapPoints;
+
+    fields.tapReward.value =
+      settings.tapReward ?? DEFAULT_SETTINGS.tapReward;
+
+    fields.dailyLimit.value =
+      settings.dailyTapLimit ?? DEFAULT_SETTINGS.dailyTapLimit;
+
+    fields.videoReward.value =
+      settings.videoReward ?? DEFAULT_SETTINGS.videoReward;
   }
 
-  if (req.method !== "GET" && req.method !== "POST") {
-    res.setHeader("Allow", "GET, POST, OPTIONS");
+  function collectSettings() {
+    const values = {
+      activationPrices: [
+        Number(fields.priceOne.value),
+        Number(fields.priceTwo.value)
+      ],
+      tapPoints: Number(fields.tapPoints.value),
+      tapReward: Number(fields.tapReward.value),
+      dailyTapLimit: Number(fields.dailyLimit.value),
+      videoReward: Number(fields.videoReward.value)
+    };
 
-    return send(res, 405, {
-      ok: false,
-      message: "Method not allowed."
-    });
+    if (
+      !validNumber(values.activationPrices[0], 100, 1000000) ||
+      !validNumber(values.activationPrices[1], 100, 1000000)
+    ) {
+      throw new Error("Enter valid activation fees.");
+    }
+
+    if (values.activationPrices[0] === values.activationPrices[1]) {
+      throw new Error("The two activation fees must be different.");
+    }
+
+    if (!validNumber(values.tapPoints, 1, 1000000)) {
+      throw new Error("Enter valid points per Tap.");
+    }
+
+    if (!validNumber(values.tapReward, 1, 1000000)) {
+      throw new Error("Enter a valid Tap reward.");
+    }
+
+    if (!validNumber(values.dailyTapLimit, 1, 100000000)) {
+      throw new Error("Enter a valid daily Tap limit.");
+    }
+
+    if (!validNumber(values.videoReward, 1, 1000000)) {
+      throw new Error("Enter a valid video reward.");
+    }
+
+    return values;
   }
 
-  try {
-    if (req.method === "GET") {
-      const [
-        settingsResult,
-        usersResult,
-        paymentsResult
-      ] = await Promise.all([
-        readJSON(SETTINGS_FILE, DEFAULT_SETTINGS),
-        readJSON(USERS_FILE, { users: [] }),
-        readJSON(PAYMENTS_FILE, { payments: [] })
-      ]);
+  // =================================
+  // ACCOUNT DISPLAY
+  // =================================
 
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        ...(settingsResult.data || {})
-      };
+  function formatMoney(amount) {
+    if (
+      amount === null ||
+      amount === undefined ||
+      !Number.isFinite(Number(amount))
+    ) {
+      return "Unavailable";
+    }
 
-      const users = getData(usersResult, "users");
-      const payments = getData(paymentsResult, "payments");
+    return "₦" + Number(amount).toLocaleString("en-NG");
+  }
 
-      const accounts = users
-        .filter(user =>
-          String(user.status || "").toLowerCase() === "active"
+  function createElement(tag, className, text) {
+    const element = document.createElement(tag);
+
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = String(text);
+
+    return element;
+  }
+
+  function renderAccounts(accounts) {
+    accountsList.replaceChildren();
+
+    const safeAccounts = Array.isArray(accounts)
+      ? accounts
+      : [];
+
+    accountCount.textContent =
+      safeAccounts.length.toLocaleString("en-NG");
+
+    if (!safeAccounts.length) {
+      accountsList.appendChild(
+        createElement(
+          "div",
+          "ta-empty",
+          "No active accounts found."
         )
-        .map(user => {
-          const payment = findPaymentForUser(user, payments);
+      );
 
-          return {
-            email: user.email || "",
-            username: user.username || "",
-            status: user.status,
-            amountPaid: payment
-              ? Number(payment.amount || 0)
-              : null
-          };
-        });
-
-      return send(res, 200, {
-        ok: true,
-        settings,
-        accounts
-      });
+      return;
     }
 
-    const settings = validateSettings(req.body);
+    safeAccounts.forEach(function (account) {
+      const card = createElement("article", "ta-account");
+      const top = createElement("div", "ta-account-top");
+      const identity = createElement("div");
 
-    if (!settings) {
-      return send(res, 400, {
-        ok: false,
-        message: "Invalid settings. Check the values and try again."
-      });
-    }
+      identity.appendChild(
+        createElement(
+          "div",
+          "ta-account-name",
+          account.username
+            ? "@" + account.username
+            : "No username"
+        )
+      );
 
-    const stored = await readJSON(
-      SETTINGS_FILE,
-      DEFAULT_SETTINGS
-    );
+      identity.appendChild(
+        createElement(
+          "div",
+          "ta-account-email",
+          account.email || "No email"
+        )
+      );
 
-    await writeJSON(
-      SETTINGS_FILE,
-      {
-        ...DEFAULT_SETTINGS,
-        ...(stored.data || {}),
-        ...settings,
-        updatedAt: new Date().toISOString()
-      },
-      stored.sha
-    );
+      top.appendChild(identity);
 
-    return send(res, 200, {
-      ok: true,
-      message: "Admin settings updated.",
-      settings
-    });
+      top.appendChild(
+        createElement(
+          "span",
+          "ta-account-status",
+          "ACTIVE"
+        )
+      );
 
-  } catch (error) {
-    console.error("[TUNEVA ADMIN]", error);
+      const bottom = createElement(
+        "div",
+        "ta-account-bottom"
+      );
 
-    return send(res, 500, {
-      ok: false,
-      message: "Unable to process the admin request."
+      bottom.appendChild(
+        createElement("span", "", "Amount paid")
+      );
+
+      bottom.appendChild(
+        createElement(
+          "strong",
+          "",
+          formatMoney(account.amountPaid)
+        )
+      );
+
+      card.appendChild(top);
+      card.appendChild(bottom);
+
+      accountsList.appendChild(card);
     });
   }
-};
+
+  // =================================
+  // LOAD DASHBOARD
+  // =================================
+
+  async function loadDashboard() {
+    if (requestInProgress) return;
+
+    requestInProgress = true;
+
+    if (refreshButton) {
+      refreshButton.disabled = true;
+    }
+
+    setMessage(settingsMessage, "Loading dashboard...", "");
+
+    try {
+      const result = await apiRequest("GET");
+
+      populateSettings(
+        Object.assign(
+          {},
+          DEFAULT_SETTINGS,
+          result.settings || {}
+        )
+      );
+
+      renderAccounts(result.accounts || []);
+
+      setMessage(settingsMessage, "", "");
+
+    } catch (error) {
+      setMessage(
+        settingsMessage,
+        error.message,
+        "error"
+      );
+
+    } finally {
+      requestInProgress = false;
+
+      if (refreshButton) {
+        refreshButton.disabled = false;
+      }
+    }
+  }
+
+  // =================================
+  // SAVE SETTINGS
+  // =================================
+
+  settingsForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    if (requestInProgress) return;
+
+    let settings;
+
+    try {
+      settings = collectSettings();
+    } catch (error) {
+      setMessage(
+        settingsMessage,
+        error.message,
+        "error"
+      );
+
+      return;
+    }
+
+    requestInProgress = true;
+
+    settingsButton.disabled = true;
+    settingsButton.textContent = "Saving...";
+
+    setMessage(settingsMessage, "", "");
+
+    try {
+      const result = await apiRequest("POST", settings);
+
+      populateSettings(
+        Object.assign(
+          {},
+          DEFAULT_SETTINGS,
+          result.settings || settings
+        )
+      );
+
+      setMessage(
+        settingsMessage,
+        "All settings saved successfully.",
+        "success"
+      );
+
+    } catch (error) {
+      setMessage(
+        settingsMessage,
+        error.message,
+        "error"
+      );
+
+    } finally {
+      requestInProgress = false;
+
+      settingsButton.disabled = false;
+      settingsButton.textContent = "Save all settings";
+    }
+  });
+
+  // =================================
+  // REFRESH
+  // =================================
+
+  refreshButton.addEventListener("click", function () {
+    setMessage(settingsMessage, "", "");
+    loadDashboard();
+  });
+
+  // =================================
+  // REMOVE OLD LOGOUT BUTTON ACTION
+  // =================================
+
+  if (logoutButton) {
+    logoutButton.style.display = "none";
+  }
+
+  // =================================
+  // INITIAL LOAD
+  // =================================
+
+  loadDashboard();
+
+})();
+    
