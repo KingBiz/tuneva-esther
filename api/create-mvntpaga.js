@@ -50,6 +50,16 @@ function hashToken(token) {
     .digest("hex");
 }
 
+function normalizePhone(phone) {
+  let value = String(phone || "").replace(/\D/g, "");
+
+  if (value.startsWith("234") && value.length === 13) {
+    value = "0" + value.slice(3);
+  }
+
+  return value;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -166,30 +176,41 @@ module.exports = async function handler(req, res) {
       : [];
 
     /* =====================================
-       CHECK EXISTING ACCOUNTS
+       CHECK ACTIVATED ACCOUNTS ONLY
+
+       Pending payment records do not reserve
+       usernames, emails or phone numbers.
     ===================================== */
 
-    const usernameExists = users.some(user =>
-      normalizeUsername(user.username) === username
-    );
+    const customerPhoneNormalized = normalizePhone(customerPhone);
 
-    const emailExists = users.some(user =>
-      normalizeEmail(user.email) === customerEmail
-    );
+    const existingAccount = users.find(user => {
+      const existingUsername = normalizeUsername(user.username);
+      const existingEmail = normalizeEmail(user.email);
 
-    const pendingExists = payments.some(payment =>
-      payment.status === "pending" &&
-      (
-        normalizeUsername(payment.username) === username ||
-        normalizeEmail(payment.email) === customerEmail
-      )
-    );
+      const existingPhone = normalizePhone(
+        user.phone ||
+        user.phoneNumber ||
+        user.customerPhone ||
+        user.customer_phone
+      );
 
-    if (usernameExists || emailExists || pendingExists) {
+      return (
+        existingUsername === username ||
+        existingEmail === customerEmail ||
+        (
+          customerPhoneNormalized &&
+          existingPhone &&
+          existingPhone === customerPhoneNormalized
+        )
+      );
+    });
+
+    if (existingAccount) {
       return send(res, 409, {
         status: false,
         code: "account_exists",
-        message: "This username or email is already registered or awaiting activation."
+        message: "An activated account already exists with this username, email or phone number."
       });
     }
 
