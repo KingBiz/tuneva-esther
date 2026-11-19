@@ -1,5 +1,4 @@
 
-
 (function () {
 "use strict";
 
@@ -13,19 +12,23 @@ const auth = document.getElementById('tuneva-auth');
 
 const API_BASE = 'https://api.tunevaweb.com.ng';
 const EARNINGS_API = API_BASE + '/api/earnings';
-const LOGOUT_API = API_BASE + '/api/logout';
 
 const SESSION_STORAGE_KEY = 'tuneva_persistent_session';
-const EARNINGS_QUEUE_KEY = 'tuneva_pending_earnings_v1';
 
-const BATCH_SIZE = 5;
+const EARNINGS_QUEUE_KEY = 'tuneva_pending_earnings_v1';
+const EARNINGS_CACHE_KEY = 'tuneva_earnings_snapshot_v1';
+
+const BATCH_SIZE = 20;
 const MAX_BATCH_SIZE = 100;
-const FLUSH_INTERVAL = 15000;
+
+const FLUSH_INTERVAL = 60000;
+const LOAD_CACHE_TTL = 300000;
 
 const DEFAULT_TAP_SETTINGS = {
   tapReward: 100,
   tapPoints: 350,
-  dailyTapLimit: 3000
+  dailyTapLimit: 3000,
+  videoReward: 1750
 };
 
 const themeButton = dashboard.querySelector('#tv-theme-toggle');
@@ -44,19 +47,30 @@ const state = {
   currentCurrency: 'NGN',
   balanceVisible: true,
   toastTimeout: null,
+
   earningsLoadPromise: null,
-  earningsQueue: Promise.resolve(),
   flushPromise: null,
   flushTimer: null,
+
+  lastLoadAt: 0,
+  loadBackoffUntil: 0,
+  flushBackoffUntil: 0,
+
+  loadFailures: 0,
+  flushFailures: 0,
+
   isLoggingOut: false,
   sessionEnded: false,
+
   tapTodayEarnings: 0,
   pendingEvents: [],
   serverEarnings: null,
+
   balances: {
     NGN: { amount: 0, symbol: '₦' },
     KWD: { amount: null, symbol: 'KWD ' }
   },
+
   earnings: {
     NGN: '₦0.00',
     KWD: 'KWD —'
@@ -64,25 +78,39 @@ const state = {
 };
 
 // =================================
-// PERSISTENT BROWSER TOKEN
+// SESSION
 // =================================
 
-function getPersistentToken() {
+function getSavedSession() {
   try {
     const saved = localStorage.getItem(SESSION_STORAGE_KEY);
 
-    if (!saved) return '';
-
-    const session = JSON.parse(saved);
-
-    return typeof session.token === 'string'
-      ? session.token
-      : '';
+    return saved ? JSON.parse(saved) : null;
 
   } catch (error) {
-    console.warn('Tuneva browser session could not be read:', error);
-    return '';
+    return null;
   }
+}
+
+function getPersistentToken() {
+  const session = getSavedSession();
+
+  return session && typeof session.token === 'string'
+    ? session.token
+    : '';
+}
+
+function getUserStorageKey(base) {
+  const session = getSavedSession();
+
+  const userId =
+    session && session.user && session.user.id
+      ? String(session.user.id)
+      : '';
+
+  return userId
+    ? base + '_' + encodeURIComponent(userId)
+    : base;
 }
 
 function getAuthHeaders(extra) {
@@ -94,6 +122,27 @@ function getAuthHeaders(extra) {
   }
 
   return headers;
+}
+
+function getQueueKey() {
+  return getUserStorageKey(EARNINGS_QUEUE_KEY);
+}
+
+function getCacheKey() {
+  return getUserStorageKey(EARNINGS_CACHE_KEY);
+}
+
+// =================================
+// DATE
+// =================================
+
+function getNigeriaDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
 }
 
 // =================================
@@ -121,7 +170,7 @@ function formatBalance(currency) {
 }
 
 // =================================
-// UPDATE DASHBOARD
+// DASHBOARD DISPLAY
 // =================================
 
 function updateBalance() {
@@ -131,15 +180,17 @@ function updateBalance() {
       : '••••••••••';
   }
 
-  const earningsElement = dashboard.querySelector('#tv-today-earnings');
+  const earningsElement =
+    dashboard.querySelector('#tv-today-earnings');
 
   if (earningsElement) {
-    earningsElement.textContent = state.earnings[state.currentCurrency];
+    earningsElement.textContent =
+      state.earnings[state.currentCurrency];
   }
 }
 
 // =================================
-// TOAST MESSAGE
+// NOTIFICATIONS
 // =================================
 
 function showToast(message) {
@@ -156,7 +207,7 @@ function showToast(message) {
 }
 
 // =================================
-// EVENT IDs
+// EVENT IDS
 // =================================
 
 function createEventId() {
@@ -172,12 +223,12 @@ function createEventId() {
 }
 
 // =================================
-// PERSISTENT EARNINGS QUEUE
+// PENDING EARNINGS QUEUE
 // =================================
 
 function loadPendingEvents() {
   try {
-    const saved = localStorage.getItem(EARNINGS_QUEUE_KEY);
+    const saved = localStorage.getItem(getQueueKey());
 
     if (!saved) {
       state.pendingEvents = [];
@@ -205,7 +256,7 @@ function loadPendingEvents() {
 function persistPendingEvents() {
   try {
     localStorage.setItem(
-      EARNINGS_QUEUE_KEY,
+      getQueueKey(),
       JSON.stringify(state.pendingEvents)
     );
   } catch (error) {
@@ -219,8 +270,14 @@ function getPendingTapCount() {
   }).length;
 }
 
+function getPendingVideoCount() {
+  return state.pendingEvents.filter(function (event) {
+    return event.action === 'video';
+  }).length;
+}
+
 // =================================
-// DYNAMIC TAP SETTINGS
+// SETTINGS
 // =================================
 
 function getTapSettings(snapshot) {
@@ -228,21 +285,34 @@ function getTapSettings(snapshot) {
     ? snapshot.settings
     : {};
 
+  function valid(value, fallback) {
+    const number = Number(value);
+
+    return Number.isSafeInteger(number) && number > 0
+      ? number
+      : fallback;
+  }
+
   return {
-    tapReward:
-      Number(settings.tapReward) > 0
-        ? Number(settings.tapReward)
-        : DEFAULT_TAP_SETTINGS.tapReward,
+    tapReward: valid(
+      settings.tapReward,
+      DEFAULT_TAP_SETTINGS.tapReward
+    ),
 
-    tapPoints:
-      Number(settings.tapPoints) > 0
-        ? Number(settings.tapPoints)
-        : DEFAULT_TAP_SETTINGS.tapPoints,
+    tapPoints: valid(
+      settings.tapPoints,
+      DEFAULT_TAP_SETTINGS.tapPoints
+    ),
 
-    dailyTapLimit:
-      Number(settings.dailyTapLimit) > 0
-        ? Number(settings.dailyTapLimit)
-        : DEFAULT_TAP_SETTINGS.dailyTapLimit
+    dailyTapLimit: valid(
+      settings.dailyTapLimit,
+      DEFAULT_TAP_SETTINGS.dailyTapLimit
+    ),
+
+    videoReward: valid(
+      settings.videoReward,
+      DEFAULT_TAP_SETTINGS.videoReward
+    )
   };
 }
 
@@ -251,7 +321,81 @@ function formatDailyLimit(amount) {
 }
 
 // =================================
-// OPTIMISTIC EARNINGS SNAPSHOT
+// SNAPSHOT STORAGE
+// =================================
+
+function saveCachedSnapshot() {
+  if (!state.serverEarnings) return;
+
+  try {
+    localStorage.setItem(
+      getCacheKey(),
+      JSON.stringify({
+        date: getNigeriaDate(),
+        savedAt: Date.now(),
+        earnings: state.serverEarnings
+      })
+    );
+  } catch (error) {
+    console.warn('Tuneva earnings snapshot could not be saved:', error);
+  }
+}
+
+function loadCachedSnapshot() {
+  try {
+    const saved = localStorage.getItem(getCacheKey());
+
+    if (!saved) return false;
+
+    const cache = JSON.parse(saved);
+
+    if (
+      !cache ||
+      !cache.earnings ||
+      typeof cache.earnings !== 'object'
+    ) {
+      return false;
+    }
+
+    state.serverEarnings = cache.earnings;
+    state.lastLoadAt = Number(cache.savedAt) || 0;
+
+    // Reset daily values when Nigeria's date changes.
+
+    if (cache.date !== getNigeriaDate()) {
+      state.serverEarnings.todayEarnings = 0;
+      state.serverEarnings.tapDailyPoints = 0;
+      state.serverEarnings.tapDailyEarnings = 0;
+      state.serverEarnings.tapLimitReached = false;
+
+      saveCachedSnapshot();
+    }
+
+    return true;
+
+  } catch (error) {
+    console.warn('Tuneva cached earnings could not be read:', error);
+    return false;
+  }
+}
+
+// =================================
+// RESPONSE HELPERS
+// =================================
+
+function getSnapshot(response) {
+  if (!response || typeof response !== 'object') {
+    return null;
+  }
+
+  return response.earnings ||
+    response.data ||
+    response.account ||
+    response;
+}
+
+// =================================
+// OPTIMISTIC EARNINGS
 // =================================
 
 function getOptimisticSnapshot() {
@@ -270,38 +414,50 @@ function getOptimisticSnapshot() {
         settings: Object.assign({}, DEFAULT_TAP_SETTINGS)
       };
 
-  const tapSettings = getTapSettings(base);
-
-  const tapReward = tapSettings.tapReward;
-  const tapPoints = tapSettings.tapPoints;
-  const dailyTapLimit = tapSettings.dailyTapLimit;
+  const settings = getTapSettings(base);
 
   const pendingTaps = getPendingTapCount();
+  const pendingVideos = getPendingVideoCount();
+
+  const tapReward = settings.tapReward;
+  const tapPoints = settings.tapPoints;
+  const videoReward = settings.videoReward;
 
   base.balance = Number(base.balance || 0);
   base.todayEarnings = Number(base.todayEarnings || 0);
   base.tapPoints = Number(base.tapPoints || 0);
+  base.tapCount = Number(base.tapCount || 0);
   base.tapDailyPoints = Number(base.tapDailyPoints || 0);
   base.tapDailyEarnings = Number(base.tapDailyEarnings || 0);
+  base.videoEarnings = Number(base.videoEarnings || 0);
 
-  base.balance += pendingTaps * tapReward;
-  base.todayEarnings += pendingTaps * tapReward;
+  base.balance +=
+    pendingTaps * tapReward +
+    pendingVideos * videoReward;
+
+  base.todayEarnings +=
+    pendingTaps * tapReward +
+    pendingVideos * videoReward;
+
   base.tapPoints += pendingTaps * tapPoints;
+  base.tapCount += pendingTaps;
+
   base.tapDailyPoints += pendingTaps * tapPoints;
   base.tapDailyEarnings += pendingTaps * tapReward;
+
+  base.videoEarnings += pendingVideos * videoReward;
 
   base.settings = Object.assign(
     {},
     base.settings || {},
-    tapSettings
+    settings
   );
-
-  base.tapLimitReached =
-    base.tapDailyEarnings >= dailyTapLimit;
 
   base.claimedVideos = Array.isArray(base.claimedVideos)
     ? base.claimedVideos.slice()
     : [];
+
+  // Include pending video claims locally.
 
   state.pendingEvents.forEach(function (event) {
     if (
@@ -313,32 +469,51 @@ function getOptimisticSnapshot() {
     }
   });
 
+  // Include pending events in local history.
+
+  const history = Array.isArray(base.history)
+    ? base.history.slice()
+    : [];
+
+  const existingIds = new Set(
+    history.map(function (entry) {
+      return entry.id || entry.eventId;
+    })
+  );
+
+  const pendingHistory = [];
+
+  state.pendingEvents.forEach(function (event) {
+    if (existingIds.has(event.eventId)) return;
+
+    const isVideo = event.action === 'video';
+
+    pendingHistory.push({
+      id: event.eventId,
+      title: isVideo ? 'Video Rewards' : 'Tap Rewards',
+      subtitle: isVideo
+        ? event.videoTitle || 'Video Watching'
+        : 'Tap Tap',
+      amount: isVideo ? videoReward : tapReward,
+      date: event.createdAt || new Date().toISOString(),
+      currency: 'NGN'
+    });
+  });
+
+  base.history = pendingHistory.concat(history).slice(0, 500);
+
+  base.tapLimitReached =
+    base.tapDailyEarnings >= settings.dailyTapLimit;
+
   return base;
 }
 
 // =================================
-// BACKEND EARNINGS SNAPSHOT
+// PUBLISH LOCAL SNAPSHOT
 // =================================
 
-function getSnapshot(response) {
-  if (!response || typeof response !== 'object') {
-    return null;
-  }
-
-  return response.earnings ||
-    response.data ||
-    response.account ||
-    response;
-}
-
-function applyEarningsSnapshot(response) {
+function publishOptimisticSnapshot() {
   if (state.sessionEnded || state.isLoggingOut) return;
-
-  const data = getSnapshot(response);
-
-  if (!data) return;
-
-  state.serverEarnings = Object.assign({}, data);
 
   const optimistic = getOptimisticSnapshot();
 
@@ -364,14 +539,64 @@ function applyEarningsSnapshot(response) {
 }
 
 // =================================
+// APPLY BACKEND SNAPSHOT
+// =================================
+
+function applyEarningsSnapshot(response) {
+  if (state.sessionEnded || state.isLoggingOut) return;
+
+  const data = getSnapshot(response);
+
+  if (!data || typeof data !== 'object') return;
+
+  state.serverEarnings = Object.assign({}, data);
+
+  saveCachedSnapshot();
+
+  state.lastLoadAt = Date.now();
+  state.loadFailures = 0;
+  state.loadBackoffUntil = 0;
+
+  publishOptimisticSnapshot();
+}
+
+// =================================
 // LOAD BACKEND EARNINGS
 // =================================
 
-async function loadBackendEarnings() {
-  if (state.sessionEnded || state.isLoggingOut) return null;
+async function loadBackendEarnings(options) {
+  options = options || {};
+
+  if (state.sessionEnded || state.isLoggingOut) {
+    return null;
+  }
 
   if (state.earningsLoadPromise) {
     return state.earningsLoadPromise;
+  }
+
+  // Use the browser snapshot instead of repeatedly requesting GitHub.
+
+  if (
+    !options.force &&
+    state.serverEarnings &&
+    Date.now() - state.lastLoadAt < LOAD_CACHE_TTL
+  ) {
+    return {
+      ok: true,
+      cached: true,
+      earnings: getOptimisticSnapshot()
+    };
+  }
+
+  if (Date.now() < state.loadBackoffUntil) {
+    return state.serverEarnings
+      ? {
+          ok: true,
+          cached: true,
+          earnings: getOptimisticSnapshot()
+        }
+      : null;
   }
 
   state.earningsLoadPromise = (async function () {
@@ -380,14 +605,16 @@ async function loadBackendEarnings() {
         method: 'GET',
         credentials: 'include',
         headers: getAuthHeaders({
-          'Accept': 'application/json'
+          Accept: 'application/json'
         })
       });
 
       const result = await response.json();
 
       if (!response.ok || result.ok !== true) {
-        throw new Error(result.message || 'Could not load earnings.');
+        throw new Error(
+          result.message || 'Could not load earnings.'
+        );
       }
 
       if (!state.sessionEnded && !state.isLoggingOut) {
@@ -397,7 +624,28 @@ async function loadBackendEarnings() {
       return result;
 
     } catch (error) {
+      state.loadFailures++;
+
+      const delay = Math.min(
+        900000,
+        30000 * Math.pow(2, Math.min(state.loadFailures - 1, 5))
+      );
+
+      state.loadBackoffUntil = Date.now() + delay;
+
       console.warn('Tuneva earnings load failed:', error);
+
+      // Keep using the saved browser snapshot if GitHub is unavailable.
+
+      if (state.serverEarnings) {
+        return {
+          ok: true,
+          cached: true,
+          offline: true,
+          earnings: getOptimisticSnapshot()
+        };
+      }
+
       return null;
 
     } finally {
@@ -409,7 +657,7 @@ async function loadBackendEarnings() {
 }
 
 // =================================
-// SEND BATCH TO BACKEND
+// SEND BATCH
 // =================================
 
 async function sendBatch(events, keepalive) {
@@ -417,10 +665,12 @@ async function sendBatch(events, keepalive) {
     method: 'POST',
     credentials: 'include',
     keepalive: Boolean(keepalive),
+
     headers: getAuthHeaders({
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      Accept: 'application/json'
     }),
+
     body: JSON.stringify({
       events: events
     })
@@ -429,7 +679,9 @@ async function sendBatch(events, keepalive) {
   const result = await response.json();
 
   if (!response.ok || result.ok !== true) {
-    throw new Error(result.message || 'Earnings could not be saved.');
+    throw new Error(
+      result.message || 'Earnings could not be saved.'
+    );
   }
 
   return result;
@@ -450,7 +702,11 @@ async function flushPendingEarnings(options) {
     return null;
   }
 
-  if (!options.force && navigator.onLine === false) {
+  if (navigator.onLine === false) {
+    return null;
+  }
+
+  if (Date.now() < state.flushBackoffUntil) {
     return null;
   }
 
@@ -460,9 +716,15 @@ async function flushPendingEarnings(options) {
 
   state.flushPromise = (async function () {
     try {
-      const batch = state.pendingEvents.slice(0, MAX_BATCH_SIZE);
+      const batch = state.pendingEvents.slice(
+        0,
+        MAX_BATCH_SIZE
+      );
 
-      const result = await sendBatch(batch, options.keepalive);
+      const result = await sendBatch(
+        batch,
+        options.keepalive
+      );
 
       const completedIds = new Set(
         batch.map(function (event) {
@@ -470,11 +732,16 @@ async function flushPendingEarnings(options) {
         })
       );
 
-      state.pendingEvents = state.pendingEvents.filter(function (event) {
-        return !completedIds.has(event.eventId);
-      });
+      state.pendingEvents = state.pendingEvents.filter(
+        function (event) {
+          return !completedIds.has(event.eventId);
+        }
+      );
 
       persistPendingEvents();
+
+      state.flushFailures = 0;
+      state.flushBackoffUntil = 0;
 
       if (!state.sessionEnded && !state.isLoggingOut) {
         applyEarningsSnapshot(result);
@@ -493,13 +760,38 @@ async function flushPendingEarnings(options) {
         );
       }
 
+      // Process another batch if more events remain.
+
+      if (state.pendingEvents.length > 0) {
+        setTimeout(function () {
+          flushPendingEarnings({
+            silent: true
+          });
+        }, 1500);
+      }
+
       return result;
 
     } catch (error) {
+      state.flushFailures++;
+
+      const delay = Math.min(
+        900000,
+        30000 * Math.pow(2, Math.min(state.flushFailures - 1, 5))
+      );
+
+      state.flushBackoffUntil = Date.now() + delay;
+
       console.warn('Tuneva batch submission failed:', error);
 
-      if (!options.silent && !state.sessionEnded && !state.isLoggingOut) {
-        showToast('Rewards are saved and will retry automatically.');
+      if (
+        !options.silent &&
+        !state.sessionEnded &&
+        !state.isLoggingOut
+      ) {
+        showToast(
+          'Rewards remain saved in your browser and will retry automatically.'
+        );
       }
 
       return null;
@@ -513,7 +805,7 @@ async function flushPendingEarnings(options) {
 }
 
 // =================================
-// QUEUE A REWARD
+// ADD LOCAL REWARD
 // =================================
 
 function addPendingEvent(action, extra) {
@@ -527,15 +819,25 @@ function addPendingEvent(action, extra) {
 
   extra = extra || {};
 
-  if (action === 'video' && extra.videoId) {
+  if (action === 'video') {
+    if (!extra.videoId) return null;
+
+    const videoId = String(extra.videoId);
+
     const existing = state.pendingEvents.find(function (event) {
       return (
         event.action === 'video' &&
-        event.videoId === extra.videoId
+        event.videoId === videoId
       );
     });
 
     if (existing) return existing;
+
+    const snapshot = getOptimisticSnapshot();
+
+    if (snapshot.claimedVideos.includes(videoId)) {
+      return null;
+    }
   }
 
   const event = Object.assign({
@@ -543,25 +845,23 @@ function addPendingEvent(action, extra) {
     action: action,
     createdAt: new Date().toISOString()
   }, action === 'video'
-    ? { videoId: String(extra.videoId || '') }
+    ? {
+        videoId: String(extra.videoId),
+        videoTitle: String(extra.videoTitle || '')
+      }
     : {});
 
-  if (action === 'video' && !event.videoId) {
-    return null;
-  }
-
   state.pendingEvents.push(event);
+
   persistPendingEvents();
 
-  applyEarningsSnapshot({
-    earnings: state.serverEarnings || getOptimisticSnapshot()
-  });
+  publishOptimisticSnapshot();
 
   return event;
 }
 
 // =================================
-// PUBLIC SAVE METHOD
+// SAVE REWARD
 // =================================
 
 function saveBackendEarning(action, extra) {
@@ -573,19 +873,19 @@ function saveBackendEarning(action, extra) {
     const snapshot = getOptimisticSnapshot();
     const settings = getTapSettings(snapshot);
 
-    const tapReward = settings.tapReward;
-    const dailyTapLimit = settings.dailyTapLimit;
-
     if (
-      Number(snapshot.tapDailyEarnings || 0) + tapReward >
-      dailyTapLimit
+      Number(snapshot.tapDailyEarnings || 0) +
+      settings.tapReward >
+      settings.dailyTapLimit
     ) {
       return Promise.resolve({
         ok: true,
         limitReached: true,
+
         message:
           'You have reached your daily Tap Tap earnings limit of ' +
-          formatDailyLimit(dailyTapLimit) + '.',
+          formatDailyLimit(settings.dailyTapLimit) + '.',
+
         earnings: snapshot
       });
     }
@@ -596,8 +896,12 @@ function saveBackendEarning(action, extra) {
       return Promise.resolve(null);
     }
 
+    // Sync only after the local batch reaches its threshold.
+
     if (getPendingTapCount() >= BATCH_SIZE) {
-      flushPendingEarnings();
+      flushPendingEarnings({
+        silent: true
+      });
     }
 
     return Promise.resolve({
@@ -608,40 +912,42 @@ function saveBackendEarning(action, extra) {
   }
 
   if (action === 'video') {
-    return (async function () {
-      // Submit existing Tap events first.
-      if (state.pendingEvents.length) {
-        await flushPendingEarnings({ force: true });
-      }
+    extra = extra || {};
 
-      const event = addPendingEvent('video', extra);
+    const event = addPendingEvent('video', extra);
 
-      if (!event) return null;
-
-      // Video claims are confirmed individually.
-      const result = await flushPendingEarnings({ force: true });
-
-      if (!result) return null;
-
-      const data = getSnapshot(result);
+    if (!event) {
+      const snapshot = getOptimisticSnapshot();
 
       if (
-        data &&
-        Array.isArray(data.claimedVideos) &&
-        data.claimedVideos.includes(event.videoId)
+        extra.videoId &&
+        snapshot.claimedVideos.includes(String(extra.videoId))
       ) {
-        return result;
+        return Promise.resolve({
+          ok: true,
+          pending: true,
+          earnings: snapshot
+        });
       }
 
-      return null;
-    })();
+      return Promise.resolve(null);
+    }
+
+    // Video rewards are queued locally too.
+    // They are synchronized with the next batch.
+
+    return Promise.resolve({
+      ok: true,
+      pending: true,
+      earnings: getOptimisticSnapshot()
+    });
   }
 
   return Promise.resolve(null);
 }
 
 // =================================
-// AUTOMATIC RETRIES
+// AUTOMATIC SYNCHRONIZATION
 // =================================
 
 function scheduleFlush() {
@@ -651,25 +957,24 @@ function scheduleFlush() {
 
   state.flushTimer = setInterval(function () {
     if (state.pendingEvents.length) {
-      flushPendingEarnings({ silent: true });
+      flushPendingEarnings({
+        silent: true
+      });
     }
   }, FLUSH_INTERVAL);
 }
 
 window.addEventListener('online', function () {
-  flushPendingEarnings({ force: true });
+  flushPendingEarnings({
+    silent: true
+  });
 });
 
-document.addEventListener('visibilitychange', function () {
-  if (document.hidden && state.pendingEvents.length) {
-    flushPendingEarnings({ silent: true });
-  }
-});
+// Flush when the browser is closing or navigating away.
 
 window.addEventListener('pagehide', function () {
   if (state.pendingEvents.length) {
     flushPendingEarnings({
-      force: true,
       keepalive: true,
       silent: true
     });
@@ -694,13 +999,15 @@ window.addEventListener(
 );
 
 // =================================
-// THEME EVENT CONNECTION
+// THEME
 // =================================
 
 function requestTheme(theme) {
   window.dispatchEvent(
     new CustomEvent('tuneva:theme-change', {
-      detail: { theme: theme }
+      detail: {
+        theme: theme
+      }
     })
   );
 }
@@ -726,19 +1033,23 @@ window.TunevaDashboardCore = {
   updateBalance: updateBalance,
   formatMoney: formatMoney,
   showToast: showToast,
+
   loadBackendEarnings: loadBackendEarnings,
   saveBackendEarning: saveBackendEarning,
   applyEarningsSnapshot: applyEarningsSnapshot,
+
   requestTheme: requestTheme,
   getPersistentToken: getPersistentToken,
+
   flushPendingEarnings: flushPendingEarnings,
+
   getPendingEvents: function () {
     return state.pendingEvents.slice();
   }
 };
 
 // =================================
-// PUBLIC EARNINGS METHODS
+// PUBLIC EARNINGS API
 // =================================
 
 window.TunevaEarnings = {
@@ -746,21 +1057,40 @@ window.TunevaEarnings = {
   save: saveBackendEarning,
   apply: applyEarningsSnapshot,
   flush: flushPendingEarnings,
+
   getPendingEvents: function () {
     return state.pendingEvents.slice();
+  },
+
+  getSnapshot: function () {
+    return getOptimisticSnapshot();
   }
 };
 
 // =================================
-// INITIALIZE QUEUE
+// INITIALIZATION
 // =================================
 
+// Load this user's local queue and cached earnings first.
+
 loadPendingEvents();
+loadCachedSnapshot();
+
+// Display saved browser earnings immediately.
+
+publishOptimisticSnapshot();
+
+// Start periodic synchronization.
+
 scheduleFlush();
+
+// Only load from the backend when no recent browser snapshot exists.
 
 loadBackendEarnings().then(function () {
   if (state.pendingEvents.length) {
-    flushPendingEarnings({ silent: true });
+    flushPendingEarnings({
+      silent: true
+    });
   }
 });
 
