@@ -14,38 +14,52 @@ const {
 
 const USERS_FILE = "data/users.json";
 const EARNINGS_FILE = "data/earnings.json";
+const SETTINGS_FILE = "data/admin-settings.json";
 
 const INITIAL_BALANCE = 0;
-
-const TAP_POINTS = 350;
-const TAP_REWARD = 100;
-const DAILY_TAP_LIMIT = 3000;
-
-const VIDEO_REWARD = 1750;
 const MAX_BATCH_SIZE = 100;
 const MAX_SAVE_ATTEMPTS = 4;
 
-const VIDEO_REWARDS = {
-  "seyi-vibes": {
-    title: "Seyi Vibes",
-    reward: VIDEO_REWARD
-  },
-  "bigger-escapes": {
-    title: "For Bigger Escapes",
-    reward: VIDEO_REWARD
-  },
-  "bigger-fun": {
-    title: "For Bigger Fun",
-    reward: VIDEO_REWARD
-  },
-  "bigger-joyrides": {
-    title: "For Bigger Joyrides",
-    reward: VIDEO_REWARD
-  }
+const DEFAULT_SETTINGS = {
+  tapPoints: 350,
+  tapReward: 100,
+  dailyTapLimit: 3000,
+  videoReward: 1750
+};
+
+const VIDEO_TITLES = {
+  "seyi-vibes": "Seyi Vibes",
+  "bigger-escapes": "For Bigger Escapes",
+  "bigger-fun": "For Bigger Fun",
+  "bigger-joyrides": "For Bigger Joyrides"
 };
 
 function send(res, status, data) {
   return res.status(status).json(data);
+}
+
+function getSettings(data) {
+  const saved = data && typeof data === "object" ? data : {};
+
+  function valid(value, fallback, max) {
+    return Number.isSafeInteger(value) &&
+      value >= 1 &&
+      value <= max
+      ? value
+      : fallback;
+  }
+
+  return {
+    tapPoints: valid(saved.tapPoints, DEFAULT_SETTINGS.tapPoints, 1000000),
+    tapReward: valid(saved.tapReward, DEFAULT_SETTINGS.tapReward, 1000000),
+    dailyTapLimit: valid(saved.dailyTapLimit, DEFAULT_SETTINGS.dailyTapLimit, 100000000),
+    videoReward: valid(saved.videoReward, DEFAULT_SETTINGS.videoReward, 1000000)
+  };
+}
+
+async function loadSettings() {
+  const result = await readJSON(SETTINGS_FILE, DEFAULT_SETTINGS);
+  return getSettings(result.data);
 }
 
 function todayInNigeria() {
@@ -120,7 +134,7 @@ function resetDailyIfNeeded(account) {
   return false;
 }
 
-function publicAccount(account) {
+function publicAccount(account, settings) {
   return {
     balance: account.balance,
     todayEarnings: account.todayEarnings,
@@ -129,10 +143,17 @@ function publicAccount(account) {
     tapDailyPoints: account.tapDailyPoints,
     tapDailyEarnings: account.tapDailyEarnings,
     tapLimitReached:
-      account.tapDailyEarnings >= DAILY_TAP_LIMIT,
+      account.tapDailyEarnings >= settings.dailyTapLimit,
     videoEarnings: account.videoEarnings,
     claimedVideos: account.claimedVideos,
-    history: account.history
+    history: account.history,
+
+    settings: {
+      tapPoints: settings.tapPoints,
+      tapReward: settings.tapReward,
+      dailyTapLimit: settings.dailyTapLimit,
+      videoReward: settings.videoReward
+    }
   };
 }
 
@@ -154,7 +175,6 @@ function normalizeEvents(body) {
     return body.events;
   }
 
-  // Backward compatibility with existing single-event requests.
   if (body.action) {
     return [{
       eventId: body.eventId,
@@ -166,7 +186,7 @@ function normalizeEvents(body) {
   return [];
 }
 
-function processBatch(account, events) {
+function processBatch(account, events, settings) {
   const processed = new Set(account.processedEvents);
 
   const result = {
@@ -203,52 +223,52 @@ function processBatch(account, events) {
 
     if (event.action === "tap") {
       if (
-        account.tapDailyEarnings + TAP_REWARD >
-        DAILY_TAP_LIMIT
+        account.tapDailyEarnings + settings.tapReward >
+        settings.dailyTapLimit
       ) {
         result.limitReached = true;
         result.rejected++;
         continue;
       }
 
-      account.tapPoints += TAP_POINTS;
+      account.tapPoints += settings.tapPoints;
       account.tapCount += 1;
 
-      account.tapDailyPoints += TAP_POINTS;
-      account.tapDailyEarnings += TAP_REWARD;
+      account.tapDailyPoints += settings.tapPoints;
+      account.tapDailyEarnings += settings.tapReward;
 
-      account.balance += TAP_REWARD;
-      account.todayEarnings += TAP_REWARD;
+      account.balance += settings.tapReward;
+      account.todayEarnings += settings.tapReward;
 
       account.history.unshift({
         id: eventId,
         title: "Tap Rewards",
         subtitle: "Tap Tap",
-        amount: TAP_REWARD,
+        amount: settings.tapReward,
         date: new Date().toISOString(),
         currency: "NGN"
       });
 
     } else if (event.action === "video") {
       const videoId = String(event.videoId || "");
-      const video = VIDEO_REWARDS[videoId];
+      const title = VIDEO_TITLES[videoId];
 
-      if (!video || account.claimedVideos.includes(videoId)) {
+      if (!title || account.claimedVideos.includes(videoId)) {
         result.rejected++;
         continue;
       }
 
       account.claimedVideos.push(videoId);
 
-      account.videoEarnings += video.reward;
-      account.balance += video.reward;
-      account.todayEarnings += video.reward;
+      account.videoEarnings += settings.videoReward;
+      account.balance += settings.videoReward;
+      account.todayEarnings += settings.videoReward;
 
       account.history.unshift({
         id: eventId,
         title: "Video Rewards",
-        subtitle: video.title,
-        amount: video.reward,
+        subtitle: title,
+        amount: settings.videoReward,
         date: new Date().toISOString(),
         currency: "NGN"
       });
@@ -269,7 +289,7 @@ function processBatch(account, events) {
   return result;
 }
 
-async function saveBatchWithRetry(userId, events) {
+async function saveBatchWithRetry(userId, events, settings) {
   let lastError;
 
   for (
@@ -302,7 +322,11 @@ async function saveBatchWithRetry(userId, events) {
 
       resetDailyIfNeeded(account);
 
-      const batchResult = processBatch(account, events);
+      const batchResult = processBatch(
+        account,
+        events,
+        settings
+      );
 
       database.users[userId] = account;
 
@@ -314,7 +338,7 @@ async function saveBatchWithRetry(userId, events) {
 
       return {
         ...batchResult,
-        earnings: publicAccount(account)
+        earnings: publicAccount(account, settings)
       };
 
     } catch (error) {
@@ -425,7 +449,9 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // GET: READ ONLY UNLESS DAILY RESET IS REQUIRED
+    const settings = await loadSettings();
+
+    // GET: READ EARNINGS
 
     if (req.method === "GET") {
       const earningsResult = await readJSON(
@@ -468,7 +494,7 @@ module.exports = async function handler(req, res) {
 
       return send(res, 200, {
         ok: true,
-        earnings: publicAccount(account)
+        earnings: publicAccount(account, settings)
       });
     }
 
@@ -503,7 +529,8 @@ module.exports = async function handler(req, res) {
 
     const result = await saveBatchWithRetry(
       user.id,
-      events
+      events,
+      settings
     );
 
     return send(res, 200, {
