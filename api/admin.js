@@ -1,6 +1,4 @@
 
-const crypto = require("crypto");
-
 const {
   readJSON,
   writeJSON
@@ -22,35 +20,13 @@ function send(res, status, data) {
   return res.status(status).json(data);
 }
 
-function getData(result, key, fallback) {
+function getData(result, key) {
   const data = result && result.data;
 
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.[key])) return data[key];
 
-  return fallback;
-}
-
-function safeEqual(a, b) {
-  const first = Buffer.from(String(a));
-  const second = Buffer.from(String(b));
-
-  return (
-    first.length === second.length &&
-    first.length > 0 &&
-    crypto.timingSafeEqual(first, second)
-  );
-}
-
-function authorize(req) {
-  const secret = process.env.TUNEVA_ADMIN_KEY;
-
-  if (!secret || secret.length < 24) return false;
-
-  const header = String(req.headers.authorization || "");
-  const match = header.match(/^Bearer\s+(.+)$/i);
-
-  return Boolean(match && safeEqual(match[1], secret));
+  return [];
 }
 
 function validAmount(value, min, max) {
@@ -106,7 +82,10 @@ function findPaymentForUser(user, payments) {
       return false;
     }
 
-    if (paymentId && String(payment.id || "") === paymentId) {
+    if (
+      paymentId &&
+      String(payment.id || "") === paymentId
+    ) {
       return true;
     }
 
@@ -144,11 +123,15 @@ module.exports = async function handler(req, res) {
     "Access-Control-Allow-Origin",
     allowedOrigin || "*"
   );
+
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, OPTIONS"
+  );
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
+    "Content-Type"
   );
   res.setHeader("Cache-Control", "no-store");
 
@@ -162,13 +145,6 @@ module.exports = async function handler(req, res) {
     return send(res, 405, {
       ok: false,
       message: "Method not allowed."
-    });
-  }
-
-  if (!authorize(req)) {
-    return send(res, 401, {
-      ok: false,
-      message: "Admin access denied."
     });
   }
 
@@ -189,8 +165,8 @@ module.exports = async function handler(req, res) {
         ...(settingsResult.data || {})
       };
 
-      const users = getData(usersResult, "users", []);
-      const payments = getData(paymentsResult, "payments", []);
+      const users = getData(usersResult, "users");
+      const payments = getData(paymentsResult, "payments");
 
       const accounts = users
         .filter(user =>
@@ -256,4 +232,4 @@ module.exports = async function handler(req, res) {
     });
   }
 };
-    
+      
