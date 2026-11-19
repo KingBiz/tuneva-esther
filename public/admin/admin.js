@@ -43,24 +43,14 @@
   let accessKey = "";
   let requestInProgress = false;
 
-  // =================================
-  // MESSAGES
-  // =================================
-
   function setMessage(element, message, type) {
     if (!element) return;
 
     element.textContent = message || "";
     element.classList.remove("success", "error");
 
-    if (type) {
-      element.classList.add(type);
-    }
+    if (type) element.classList.add(type);
   }
-
-  // =================================
-  // API REQUESTS
-  // =================================
 
   function getHeaders(extra) {
     return Object.assign({
@@ -68,47 +58,6 @@
       Accept: "application/json"
     }, extra || {});
   }
-
-  async function apiRequest(method, body) {
-    const response = await fetch(API, {
-      method: method,
-      headers: getHeaders(
-        body ? { "Content-Type": "application/json" } : {}
-      ),
-      cache: "no-store",
-      body: body ? JSON.stringify(body) : undefined
-    });
-
-    let result;
-
-    try {
-      result = await response.json();
-    } catch (_) {
-      throw new Error("Invalid response from the admin server.");
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      clearAccess();
-      showLogin();
-
-      throw new Error(
-        "Admin access expired or was denied. Enter your access code again."
-      );
-    }
-
-    if (!response.ok || !result || result.ok !== true) {
-      throw new Error(
-        result?.message ||
-        "The admin request could not be completed."
-      );
-    }
-
-    return result;
-  }
-
-  // =================================
-  // ACCESS CODE SESSION
-  // =================================
 
   function saveAccess(key) {
     accessKey = key;
@@ -136,9 +85,46 @@
     mainScreen.hidden = false;
   }
 
-  // =================================
-  // SETTINGS VALIDATION
-  // =================================
+  async function apiRequest(method, body) {
+    const response = await fetch(API, {
+      method: method,
+      headers: getHeaders(
+        body ? { "Content-Type": "application/json" } : {}
+      ),
+      cache: "no-store",
+      body: body ? JSON.stringify(body) : undefined
+    });
+
+    let result;
+
+    try {
+      result = await response.json();
+    } catch (_) {
+      throw new Error(
+        "The admin API returned an invalid response."
+      );
+    }
+
+    if (response.status === 401) {
+      clearAccess();
+      showLogin();
+      throw new Error("Incorrect admin access code.");
+    }
+
+    if (response.status === 403) {
+      throw new Error(
+        result.message || "Admin access or origin was denied."
+      );
+    }
+
+    if (!response.ok || !result || result.ok !== true) {
+      throw new Error(
+        result?.message || "The admin request failed."
+      );
+    }
+
+    return result;
+  }
 
   function validNumber(value, minimum, maximum) {
     const number = Number(value);
@@ -190,9 +176,7 @@
       throw new Error("Enter valid activation fees.");
     }
 
-    if (
-      values.activationPrices[0] === values.activationPrices[1]
-    ) {
+    if (values.activationPrices[0] === values.activationPrices[1]) {
       throw new Error("The two activation fees must be different.");
     }
 
@@ -215,10 +199,6 @@
     return values;
   }
 
-  // =================================
-  // ACCOUNT DISPLAY
-  // =================================
-
   function formatMoney(amount) {
     if (
       amount === null ||
@@ -234,13 +214,8 @@
   function createElement(tag, className, text) {
     const element = document.createElement(tag);
 
-    if (className) {
-      element.className = className;
-    }
-
-    if (text !== undefined) {
-      element.textContent = String(text);
-    }
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = String(text);
 
     return element;
   }
@@ -257,13 +232,8 @@
 
     if (!safeAccounts.length) {
       accountsList.appendChild(
-        createElement(
-          "div",
-          "ta-empty",
-          "No active accounts found."
-        )
+        createElement("div", "ta-empty", "No active accounts found.")
       );
-
       return;
     }
 
@@ -276,9 +246,7 @@
         createElement(
           "div",
           "ta-account-name",
-          account.username
-            ? "@" + account.username
-            : "No username"
+          account.username ? "@" + account.username : "No username"
         )
       );
 
@@ -293,28 +261,17 @@
       top.appendChild(identity);
 
       top.appendChild(
-        createElement(
-          "span",
-          "ta-account-status",
-          "ACTIVE"
-        )
+        createElement("span", "ta-account-status", "ACTIVE")
       );
 
-      const bottom = createElement(
-        "div",
-        "ta-account-bottom"
-      );
+      const bottom = createElement("div", "ta-account-bottom");
 
       bottom.appendChild(
         createElement("span", "", "Amount paid")
       );
 
       bottom.appendChild(
-        createElement(
-          "strong",
-          "",
-          formatMoney(account.amountPaid)
-        )
+        createElement("strong", "", formatMoney(account.amountPaid))
       );
 
       card.appendChild(top);
@@ -324,18 +281,15 @@
     });
   }
 
-  // =================================
-  // LOAD ADMIN DASHBOARD
-  // =================================
+  // LOAD DASHBOARD
+  // This function manages its own request lock.
 
   async function loadDashboard() {
-    if (requestInProgress) return;
+    if (requestInProgress) return false;
 
     requestInProgress = true;
 
-    if (refreshButton) {
-      refreshButton.disabled = true;
-    }
+    if (refreshButton) refreshButton.disabled = true;
 
     try {
       const result = await apiRequest("GET");
@@ -351,28 +305,22 @@
       renderAccounts(result.accounts || []);
 
       showDashboard();
-
       setMessage(loginMessage, "", "");
 
+      return true;
+
     } catch (error) {
-      setMessage(
-        loginMessage,
-        error.message,
-        "error"
-      );
+      setMessage(loginMessage, error.message, "error");
+      return false;
 
     } finally {
       requestInProgress = false;
 
-      if (refreshButton) {
-        refreshButton.disabled = false;
-      }
+      if (refreshButton) refreshButton.disabled = false;
     }
   }
 
-  // =================================
   // ADMIN LOGIN
-  // =================================
 
   loginForm.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -380,12 +328,7 @@
     const key = loginInput.value.trim();
 
     if (!key) {
-      setMessage(
-        loginMessage,
-        "Enter your access code.",
-        "error"
-      );
-
+      setMessage(loginMessage, "Enter your access code.", "error");
       return;
     }
 
@@ -396,26 +339,19 @@
 
     saveAccess(key);
 
-    // loadDashboard controls requestInProgress itself.
-    // Do not set it to true here.
+    const success = await loadDashboard();
 
-    try {
-      await loadDashboard();
-
-      if (!mainScreen.hidden) {
-        loginInput.value = "";
-        setMessage(loginMessage, "", "");
-      }
-
-    } finally {
-      loginButton.disabled = false;
-      loginButton.textContent = "Continue";
+    if (success) {
+      loginInput.value = "";
+    } else {
+      clearAccess();
     }
+
+    loginButton.disabled = false;
+    loginButton.textContent = "Continue";
   });
 
-  // =================================
   // SAVE SETTINGS
-  // =================================
 
   settingsForm.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -426,19 +362,12 @@
 
     try {
       settings = collectSettings();
-
     } catch (error) {
-      setMessage(
-        settingsMessage,
-        error.message,
-        "error"
-      );
-
+      setMessage(settingsMessage, error.message, "error");
       return;
     }
 
     requestInProgress = true;
-
     settingsButton.disabled = true;
     settingsButton.textContent = "Saving...";
 
@@ -462,39 +391,28 @@
       );
 
     } catch (error) {
-      setMessage(
-        settingsMessage,
-        error.message,
-        "error"
-      );
+      setMessage(settingsMessage, error.message, "error");
 
     } finally {
       requestInProgress = false;
-
       settingsButton.disabled = false;
       settingsButton.textContent = "Save all settings";
     }
   });
 
-  // =================================
-  // REFRESH ACCOUNTS AND SETTINGS
-  // =================================
+  // REFRESH
 
   refreshButton.addEventListener("click", async function () {
     setMessage(settingsMessage, "", "");
     await loadDashboard();
   });
 
-  // =================================
   // LOG OUT
-  // =================================
 
   logoutButton.addEventListener("click", function () {
     clearAccess();
-
     settingsForm.reset();
     renderAccounts([]);
-
     accountCount.textContent = "0";
 
     setMessage(loginMessage, "", "");
@@ -503,9 +421,7 @@
     showLogin();
   });
 
-  // =================================
-  // RESTORE THIS TAB'S ADMIN SESSION
-  // =================================
+  // RESTORE SESSION
 
   try {
     const savedKey = sessionStorage.getItem(STORAGE_KEY);
@@ -516,7 +432,6 @@
     } else {
       showLogin();
     }
-
   } catch (_) {
     showLogin();
   }
