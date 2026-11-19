@@ -6,6 +6,8 @@ const {
 
 const {
   verifySessionToken,
+  verifyPersistentSessionToken,
+  getBearerToken,
   getCookie,
   setCors
 } = require("../lib/auth");
@@ -26,17 +28,14 @@ const VIDEO_REWARDS = {
     title: "Seyi Vibes",
     reward: VIDEO_REWARD
   },
-
   "bigger-escapes": {
     title: "For Bigger Escapes",
     reward: VIDEO_REWARD
   },
-
   "bigger-fun": {
     title: "For Bigger Fun",
     reward: VIDEO_REWARD
   },
-
   "bigger-joyrides": {
     title: "For Bigger Joyrides",
     reward: VIDEO_REWARD
@@ -68,13 +67,10 @@ function newAccount() {
     balance: INITIAL_BALANCE,
     todayDate: todayInNigeria(),
     todayEarnings: 0,
-
     tapPoints: 0,
     tapCount: 0,
-
     tapDailyPoints: 0,
     tapDailyEarnings: 0,
-
     videoEarnings: 0,
     claimedVideos: [],
     processedEvents: [],
@@ -114,7 +110,6 @@ function resetDailyIfNeeded(account) {
   if (account.todayDate !== today) {
     account.todayDate = today;
     account.todayEarnings = 0;
-
     account.tapDailyPoints = 0;
     account.tapDailyEarnings = 0;
   }
@@ -124,16 +119,12 @@ function publicAccount(account) {
   return {
     balance: account.balance,
     todayEarnings: account.todayEarnings,
-
     tapPoints: account.tapPoints,
     tapCount: account.tapCount,
-
     tapDailyPoints: account.tapDailyPoints,
     tapDailyEarnings: account.tapDailyEarnings,
-
     tapLimitReached:
       account.tapDailyEarnings >= DAILY_TAP_LIMIT,
-
     videoEarnings: account.videoEarnings,
     claimedVideos: account.claimedVideos,
     history: account.history
@@ -170,8 +161,22 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const token = getCookie(req, "tuneva_session");
-    const session = verifySessionToken(token);
+    // SUPPORT PERSISTENT BROWSER TOKEN AND EXISTING COOKIE
+
+    const bearerToken = getBearerToken(req);
+
+    let session = null;
+    let persistentSession = false;
+
+    if (bearerToken) {
+      session = verifyPersistentSessionToken(bearerToken);
+      persistentSession = Boolean(session);
+    }
+
+    if (!session) {
+      const cookieToken = getCookie(req, "tuneva_session");
+      session = verifySessionToken(cookieToken);
+    }
 
     if (!session || !session.sub) {
       return send(res, 401, {
@@ -191,13 +196,28 @@ module.exports = async function handler(req, res) {
         : [];
 
     const user = users.find(function (item) {
-      return item.id === session.sub && item.status === "active";
+      return (
+        item.id === session.sub &&
+        item.status === "active"
+      );
     });
 
     if (!user) {
       return send(res, 401, {
         ok: false,
         message: "Your account could not be verified."
+      });
+    }
+
+    // CHECK TOKEN VERSION FOR PERSISTENT SESSIONS
+
+    if (
+      persistentSession &&
+      Number(user.sessionVersion || 1) !== session.v
+    ) {
+      return send(res, 401, {
+        ok: false,
+        message: "Your browser session is no longer valid."
       });
     }
 
@@ -273,8 +293,6 @@ module.exports = async function handler(req, res) {
     // TAP REWARDS
 
     if (action === "tap") {
-      // ENFORCE DAILY TAP EARNINGS LIMIT
-
       if (
         account.tapDailyEarnings + TAP_REWARD >
         DAILY_TAP_LIMIT
@@ -321,7 +339,6 @@ module.exports = async function handler(req, res) {
 
     else if (action === "video") {
       const videoId = String(body.videoId || "");
-
       const video = VIDEO_REWARDS[videoId];
 
       if (!video) {
@@ -338,17 +355,11 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      // Record the claimed video.
-
       account.claimedVideos.push(videoId);
-
-      // Add the reward.
 
       account.videoEarnings += video.reward;
       account.balance += video.reward;
       account.todayEarnings += video.reward;
-
-      // Record the correct video title.
 
       account.history.unshift({
         id: eventId,
