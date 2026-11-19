@@ -43,6 +43,10 @@
   let accessKey = "";
   let requestInProgress = false;
 
+  // =================================
+  // MESSAGES
+  // =================================
+
   function setMessage(element, message, type) {
     if (!element) return;
 
@@ -53,6 +57,10 @@
       element.classList.add(type);
     }
   }
+
+  // =================================
+  // API REQUESTS
+  // =================================
 
   function getHeaders(extra) {
     return Object.assign({
@@ -82,26 +90,32 @@
     if (response.status === 401 || response.status === 403) {
       clearAccess();
       showLogin();
-      throw new Error("Admin access expired or was denied. Enter your access code again.");
+
+      throw new Error(
+        "Admin access expired or was denied. Enter your access code again."
+      );
     }
 
     if (!response.ok || !result || result.ok !== true) {
       throw new Error(
-        result?.message || "The admin request could not be completed."
+        result?.message ||
+        "The admin request could not be completed."
       );
     }
 
     return result;
   }
 
+  // =================================
+  // ACCESS CODE SESSION
+  // =================================
+
   function saveAccess(key) {
     accessKey = key;
 
     try {
       sessionStorage.setItem(STORAGE_KEY, key);
-    } catch (_) {
-      // The current page session can still use the key.
-    }
+    } catch (_) {}
   }
 
   function clearAccess() {
@@ -121,6 +135,10 @@
     loginScreen.hidden = true;
     mainScreen.hidden = false;
   }
+
+  // =================================
+  // SETTINGS VALIDATION
+  // =================================
 
   function validNumber(value, minimum, maximum) {
     const number = Number(value);
@@ -172,7 +190,9 @@
       throw new Error("Enter valid activation fees.");
     }
 
-    if (values.activationPrices[0] === values.activationPrices[1]) {
+    if (
+      values.activationPrices[0] === values.activationPrices[1]
+    ) {
       throw new Error("The two activation fees must be different.");
     }
 
@@ -195,8 +215,16 @@
     return values;
   }
 
+  // =================================
+  // ACCOUNT DISPLAY
+  // =================================
+
   function formatMoney(amount) {
-    if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) {
+    if (
+      amount === null ||
+      amount === undefined ||
+      !Number.isFinite(Number(amount))
+    ) {
       return "Unavailable";
     }
 
@@ -206,8 +234,13 @@
   function createElement(tag, className, text) {
     const element = document.createElement(tag);
 
-    if (className) element.className = className;
-    if (text !== undefined) element.textContent = String(text);
+    if (className) {
+      element.className = className;
+    }
+
+    if (text !== undefined) {
+      element.textContent = String(text);
+    }
 
     return element;
   }
@@ -219,26 +252,33 @@
       ? accounts
       : [];
 
-    accountCount.textContent = safeAccounts.length.toLocaleString("en-NG");
+    accountCount.textContent =
+      safeAccounts.length.toLocaleString("en-NG");
 
     if (!safeAccounts.length) {
       accountsList.appendChild(
-        createElement("div", "ta-empty", "No active accounts found.")
+        createElement(
+          "div",
+          "ta-empty",
+          "No active accounts found."
+        )
       );
+
       return;
     }
 
     safeAccounts.forEach(function (account) {
       const card = createElement("article", "ta-account");
       const top = createElement("div", "ta-account-top");
-
       const identity = createElement("div");
 
       identity.appendChild(
         createElement(
           "div",
           "ta-account-name",
-          account.username ? "@" + account.username : "No username"
+          account.username
+            ? "@" + account.username
+            : "No username"
         )
       );
 
@@ -260,7 +300,10 @@
         )
       );
 
-      const bottom = createElement("div", "ta-account-bottom");
+      const bottom = createElement(
+        "div",
+        "ta-account-bottom"
+      );
 
       bottom.appendChild(
         createElement("span", "", "Amount paid")
@@ -281,35 +324,55 @@
     });
   }
 
+  // =================================
+  // LOAD ADMIN DASHBOARD
+  // =================================
+
   async function loadDashboard() {
     if (requestInProgress) return;
 
     requestInProgress = true;
 
-    if (refreshButton) refreshButton.disabled = true;
+    if (refreshButton) {
+      refreshButton.disabled = true;
+    }
 
     try {
       const result = await apiRequest("GET");
 
       populateSettings(
-        Object.assign({}, DEFAULT_SETTINGS, result.settings || {})
+        Object.assign(
+          {},
+          DEFAULT_SETTINGS,
+          result.settings || {}
+        )
       );
 
       renderAccounts(result.accounts || []);
 
       showDashboard();
 
+      setMessage(loginMessage, "", "");
+
     } catch (error) {
-      setMessage(loginMessage, error.message, "error");
+      setMessage(
+        loginMessage,
+        error.message,
+        "error"
+      );
 
     } finally {
       requestInProgress = false;
 
-      if (refreshButton) refreshButton.disabled = false;
+      if (refreshButton) {
+        refreshButton.disabled = false;
+      }
     }
   }
 
+  // =================================
   // ADMIN LOGIN
+  // =================================
 
   loginForm.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -317,17 +380,24 @@
     const key = loginInput.value.trim();
 
     if (!key) {
-      setMessage(loginMessage, "Enter your access code.", "error");
+      setMessage(
+        loginMessage,
+        "Enter your access code.",
+        "error"
+      );
+
       return;
     }
 
     if (requestInProgress) return;
 
-    requestInProgress = true;
     loginButton.disabled = true;
     loginButton.textContent = "Checking...";
 
     saveAccess(key);
+
+    // loadDashboard controls requestInProgress itself.
+    // Do not set it to true here.
 
     try {
       await loadDashboard();
@@ -337,17 +407,15 @@
         setMessage(loginMessage, "", "");
       }
 
-    } catch (error) {
-      setMessage(loginMessage, error.message, "error");
-
     } finally {
-      requestInProgress = false;
       loginButton.disabled = false;
       loginButton.textContent = "Continue";
     }
   });
 
+  // =================================
   // SAVE SETTINGS
+  // =================================
 
   settingsForm.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -358,12 +426,19 @@
 
     try {
       settings = collectSettings();
+
     } catch (error) {
-      setMessage(settingsMessage, error.message, "error");
+      setMessage(
+        settingsMessage,
+        error.message,
+        "error"
+      );
+
       return;
     }
 
     requestInProgress = true;
+
     settingsButton.disabled = true;
     settingsButton.textContent = "Saving...";
 
@@ -373,7 +448,11 @@
       const result = await apiRequest("POST", settings);
 
       populateSettings(
-        Object.assign({}, DEFAULT_SETTINGS, result.settings || settings)
+        Object.assign(
+          {},
+          DEFAULT_SETTINGS,
+          result.settings || settings
+        )
       );
 
       setMessage(
@@ -383,35 +462,50 @@
       );
 
     } catch (error) {
-      setMessage(settingsMessage, error.message, "error");
+      setMessage(
+        settingsMessage,
+        error.message,
+        "error"
+      );
 
     } finally {
       requestInProgress = false;
+
       settingsButton.disabled = false;
       settingsButton.textContent = "Save all settings";
     }
   });
 
+  // =================================
   // REFRESH ACCOUNTS AND SETTINGS
+  // =================================
 
   refreshButton.addEventListener("click", async function () {
     setMessage(settingsMessage, "", "");
     await loadDashboard();
   });
 
+  // =================================
   // LOG OUT
+  // =================================
 
   logoutButton.addEventListener("click", function () {
     clearAccess();
+
     settingsForm.reset();
     renderAccounts([]);
+
     accountCount.textContent = "0";
+
     setMessage(loginMessage, "", "");
     setMessage(settingsMessage, "", "");
+
     showLogin();
   });
 
+  // =================================
   // RESTORE THIS TAB'S ADMIN SESSION
+  // =================================
 
   try {
     const savedKey = sessionStorage.getItem(STORAGE_KEY);
@@ -422,10 +516,10 @@
     } else {
       showLogin();
     }
+
   } catch (_) {
     showLogin();
   }
 
 })();
-
- 
+        
