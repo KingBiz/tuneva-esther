@@ -90,6 +90,23 @@ button {
   margin-top: 5px;
 }
 
+.ta-nav-button {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ta-nav-button:active,
+.ta-back-button:active {
+  transform: scale(.98);
+}
+
 .ta-section {
   margin-bottom: 38px;
 }
@@ -107,6 +124,18 @@ button {
   font-family: "Zalando Sans", sans-serif;
   font-size: 22px;
   font-weight: 700;
+}
+
+.ta-back-button {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .ta-card {
@@ -205,12 +234,100 @@ button {
   color: var(--red);
 }
 
+.ta-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 17px;
+  border-top: 1px solid var(--border);
+}
+
+.ta-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ta-toggle-copy strong {
+  font-family: "Zalando Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ta-toggle-copy span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ta-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 27px;
+  padding: 0;
+  border: 0;
+  border-radius: 30px;
+  background: #c9c7c1;
+  transition: background .2s;
+}
+
+.ta-switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  transition: transform .2s;
+}
+
+.ta-switch[aria-checked="true"] {
+  background: var(--green);
+}
+
+.ta-switch[aria-checked="true"] span {
+  transform: translateX(21px);
+}
+
+.ta-switch:focus-visible {
+  outline: 3px solid rgba(148, 122, 72, .2);
+  outline-offset: 3px;
+}
+
+.ta-withdrawal-card {
+  padding-bottom: 16px;
+}
+
+.ta-withdrawal-card > p {
+  margin-bottom: 18px;
+}
+
 .ta-footer {
   padding: 22px 0 5px;
   border-top: 1px solid var(--border);
   color: #aaa69e;
   text-align: center;
   font-size: 10px;
+}
+
+@media (max-width: 420px) {
+  .ta-header {
+    align-items: flex-start;
+  }
+
+  .ta-nav-button {
+    max-width: 125px;
+    white-space: normal;
+    line-height: 1.3;
+  }
+
+  .ta-section-heading {
+    align-items: flex-start;
+  }
 }
 
 @media (min-width: 650px) {
@@ -237,4 +354,3 @@ button {
     grid-column: 1 / -1;
   }
 }
-
