@@ -4,18 +4,9 @@
 
   const API = "https://api.tunevaweb.com.ng/api/admin";
 
-  const loginScreen = document.getElementById("ta-login");
-  const mainScreen = document.getElementById("ta-main");
-
   const settingsForm = document.getElementById("ta-settings-form");
   const settingsButton = document.getElementById("ta-save-settings");
   const settingsMessage = document.getElementById("ta-settings-message");
-
-  const logoutButton = document.getElementById("ta-logout");
-  const refreshButton = document.getElementById("ta-refresh");
-
-  const accountsList = document.getElementById("ta-accounts-list");
-  const accountCount = document.getElementById("ta-account-count");
 
   const fields = {
     priceOne: document.getElementById("ta-price-one"),
@@ -36,41 +27,18 @@
 
   let requestInProgress = false;
 
-  // =================================
-  // SHOW DASHBOARD IMMEDIATELY
-  // =================================
-
-  if (loginScreen) {
-    loginScreen.hidden = true;
-    loginScreen.style.display = "none";
-  }
-
-  if (mainScreen) {
-    mainScreen.hidden = false;
-  }
-
-  // =================================
-  // MESSAGES
-  // =================================
-
-  function setMessage(element, message, type) {
-    if (!element) return;
-
-    element.textContent = message || "";
-    element.classList.remove("success", "error");
+  function setMessage(message, type) {
+    settingsMessage.textContent = message || "";
+    settingsMessage.classList.remove("success", "error");
 
     if (type) {
-      element.classList.add(type);
+      settingsMessage.classList.add(type);
     }
   }
 
-  // =================================
-  // API REQUESTS
-  // =================================
-
   async function apiRequest(method, body) {
     const response = await fetch(API, {
-      method: method,
+      method,
       headers: {
         Accept: "application/json",
         ...(body ? {
@@ -98,10 +66,6 @@
 
     return result;
   }
-
-  // =================================
-  // SETTINGS
-  // =================================
 
   function validNumber(value, minimum, maximum) {
     const number = Number(value);
@@ -176,124 +140,11 @@
     return values;
   }
 
-  // =================================
-  // ACCOUNT DISPLAY
-  // =================================
-
-  function formatMoney(amount) {
-    if (
-      amount === null ||
-      amount === undefined ||
-      !Number.isFinite(Number(amount))
-    ) {
-      return "Unavailable";
-    }
-
-    return "₦" + Number(amount).toLocaleString("en-NG");
-  }
-
-  function createElement(tag, className, text) {
-    const element = document.createElement(tag);
-
-    if (className) element.className = className;
-    if (text !== undefined) element.textContent = String(text);
-
-    return element;
-  }
-
-  function renderAccounts(accounts) {
-    accountsList.replaceChildren();
-
-    const safeAccounts = Array.isArray(accounts)
-      ? accounts
-      : [];
-
-    accountCount.textContent =
-      safeAccounts.length.toLocaleString("en-NG");
-
-    if (!safeAccounts.length) {
-      accountsList.appendChild(
-        createElement(
-          "div",
-          "ta-empty",
-          "No active accounts found."
-        )
-      );
-
-      return;
-    }
-
-    safeAccounts.forEach(function (account) {
-      const card = createElement("article", "ta-account");
-      const top = createElement("div", "ta-account-top");
-      const identity = createElement("div");
-
-      identity.appendChild(
-        createElement(
-          "div",
-          "ta-account-name",
-          account.username
-            ? "@" + account.username
-            : "No username"
-        )
-      );
-
-      identity.appendChild(
-        createElement(
-          "div",
-          "ta-account-email",
-          account.email || "No email"
-        )
-      );
-
-      top.appendChild(identity);
-
-      top.appendChild(
-        createElement(
-          "span",
-          "ta-account-status",
-          "ACTIVE"
-        )
-      );
-
-      const bottom = createElement(
-        "div",
-        "ta-account-bottom"
-      );
-
-      bottom.appendChild(
-        createElement("span", "", "Amount paid")
-      );
-
-      bottom.appendChild(
-        createElement(
-          "strong",
-          "",
-          formatMoney(account.amountPaid)
-        )
-      );
-
-      card.appendChild(top);
-      card.appendChild(bottom);
-
-      accountsList.appendChild(card);
-    });
-  }
-
-  // =================================
-  // LOAD DASHBOARD
-  // =================================
-
   async function loadDashboard() {
     if (requestInProgress) return;
 
     requestInProgress = true;
-
-    if (refreshButton) {
-      refreshButton.disabled = true;
-    }
-
-    setMessage(settingsMessage, "Loading dashboard...", "");
+    setMessage("Loading settings...", "");
 
     try {
       const result = await apiRequest("GET");
@@ -306,29 +157,15 @@
         )
       );
 
-      renderAccounts(result.accounts || []);
-
-      setMessage(settingsMessage, "", "");
+      setMessage("", "");
 
     } catch (error) {
-      setMessage(
-        settingsMessage,
-        error.message,
-        "error"
-      );
+      setMessage(error.message, "error");
 
     } finally {
       requestInProgress = false;
-
-      if (refreshButton) {
-        refreshButton.disabled = false;
-      }
     }
   }
-
-  // =================================
-  // SAVE SETTINGS
-  // =================================
 
   settingsForm.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -340,12 +177,7 @@
     try {
       settings = collectSettings();
     } catch (error) {
-      setMessage(
-        settingsMessage,
-        error.message,
-        "error"
-      );
-
+      setMessage(error.message, "error");
       return;
     }
 
@@ -354,7 +186,7 @@
     settingsButton.disabled = true;
     settingsButton.textContent = "Saving...";
 
-    setMessage(settingsMessage, "", "");
+    setMessage("", "");
 
     try {
       const result = await apiRequest("POST", settings);
@@ -368,48 +200,20 @@
       );
 
       setMessage(
-        settingsMessage,
         "All settings saved successfully.",
         "success"
       );
 
     } catch (error) {
-      setMessage(
-        settingsMessage,
-        error.message,
-        "error"
-      );
+      setMessage(error.message, "error");
 
     } finally {
       requestInProgress = false;
-
       settingsButton.disabled = false;
       settingsButton.textContent = "Save all settings";
     }
   });
 
-  // =================================
-  // REFRESH
-  // =================================
-
-  refreshButton.addEventListener("click", function () {
-    setMessage(settingsMessage, "", "");
-    loadDashboard();
-  });
-
-  // =================================
-  // REMOVE OLD LOGOUT BUTTON ACTION
-  // =================================
-
-  if (logoutButton) {
-    logoutButton.style.display = "none";
-  }
-
-  // =================================
-  // INITIAL LOAD
-  // =================================
-
   loadDashboard();
 
 })();
-    
