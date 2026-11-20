@@ -11,7 +11,8 @@ const DEFAULT_SETTINGS = {
   tapPoints: 350,
   tapReward: 100,
   dailyTapLimit: 3000,
-  videoReward: 1750
+  videoReward: 1750,
+  withdrawalsEnabled: true
 };
 
 const ALLOWED_ORIGINS = new Set([
@@ -33,7 +34,9 @@ function validAmount(value, min, max) {
 }
 
 function validateSettings(body) {
-  if (!body || typeof body !== "object") return null;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
 
   const prices = body.activationPrices;
 
@@ -51,13 +54,23 @@ function validateSettings(body) {
   if (!validAmount(body.dailyTapLimit, 1, 100000000)) return null;
   if (!validAmount(body.videoReward, 1, 1000000)) return null;
 
-  return {
+  const settings = {
     activationPrices: prices,
     tapPoints: body.tapPoints,
     tapReward: body.tapReward,
     dailyTapLimit: body.dailyTapLimit,
     videoReward: body.videoReward
   };
+
+  if (Object.prototype.hasOwnProperty.call(body, "withdrawalsEnabled")) {
+    if (typeof body.withdrawalsEnabled !== "boolean") {
+      return null;
+    }
+
+    settings.withdrawalsEnabled = body.withdrawalsEnabled;
+  }
+
+  return settings;
 }
 
 module.exports = async function handler(req, res) {
@@ -130,21 +143,23 @@ module.exports = async function handler(req, res) {
       DEFAULT_SETTINGS
     );
 
+    const updatedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(stored.data || {}),
+      ...settings,
+      updatedAt: new Date().toISOString()
+    };
+
     await writeJSON(
       SETTINGS_FILE,
-      {
-        ...DEFAULT_SETTINGS,
-        ...(stored.data || {}),
-        ...settings,
-        updatedAt: new Date().toISOString()
-      },
+      updatedSettings,
       stored.sha
     );
 
     return send(res, 200, {
       ok: true,
       message: "Admin settings updated.",
-      settings
+      settings: updatedSettings
     });
 
   } catch (error) {
