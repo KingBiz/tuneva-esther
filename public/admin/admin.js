@@ -4,9 +4,18 @@
 
   const API = "https://api.tunevaweb.com.ng/api/admin";
 
+  const platformScreen = document.getElementById("ta-platform-screen");
+  const withdrawalsScreen = document.getElementById("ta-withdrawals-screen");
+  const openWithdrawalsButton = document.getElementById("ta-open-withdrawals");
+  const backSettingsButton = document.getElementById("ta-back-settings");
+
   const settingsForm = document.getElementById("ta-settings-form");
   const settingsButton = document.getElementById("ta-save-settings");
   const settingsMessage = document.getElementById("ta-settings-message");
+
+  const withdrawalsToggle = document.getElementById("ta-withdrawals-toggle");
+  const withdrawalStatus = document.getElementById("ta-withdrawal-status");
+  const withdrawalMessage = document.getElementById("ta-withdrawal-message");
 
   const fields = {
     priceOne: document.getElementById("ta-price-one"),
@@ -22,17 +31,20 @@
     tapPoints: 350,
     tapReward: 100,
     dailyTapLimit: 3000,
-    videoReward: 1750
+    videoReward: 1750,
+    withdrawalsEnabled: true
   };
 
   let requestInProgress = false;
+  let settingsLoaded = false;
+  let withdrawalsEnabled = true;
 
-  function setMessage(message, type) {
-    settingsMessage.textContent = message || "";
-    settingsMessage.classList.remove("success", "error");
+  function setMessage(element, message, type) {
+    element.textContent = message || "";
+    element.classList.remove("success", "error");
 
     if (type) {
-      settingsMessage.classList.add(type);
+      element.classList.add(type);
     }
   }
 
@@ -77,6 +89,19 @@
     );
   }
 
+  function updateWithdrawalControl(enabled) {
+    withdrawalsEnabled = enabled;
+
+    withdrawalsToggle.setAttribute(
+      "aria-checked",
+      enabled ? "true" : "false"
+    );
+
+    withdrawalStatus.textContent = enabled
+      ? "Withdrawals are currently enabled."
+      : "Withdrawals are currently disabled.";
+  }
+
   function populateSettings(settings) {
     const prices = Array.isArray(settings.activationPrices)
       ? settings.activationPrices
@@ -96,6 +121,12 @@
 
     fields.videoReward.value =
       settings.videoReward ?? DEFAULT_SETTINGS.videoReward;
+
+    updateWithdrawalControl(
+      typeof settings.withdrawalsEnabled === "boolean"
+        ? settings.withdrawalsEnabled
+        : DEFAULT_SETTINGS.withdrawalsEnabled
+    );
   }
 
   function collectSettings() {
@@ -107,7 +138,8 @@
       tapPoints: Number(fields.tapPoints.value),
       tapReward: Number(fields.tapReward.value),
       dailyTapLimit: Number(fields.dailyLimit.value),
-      videoReward: Number(fields.videoReward.value)
+      videoReward: Number(fields.videoReward.value),
+      withdrawalsEnabled
     };
 
     if (
@@ -144,7 +176,8 @@
     if (requestInProgress) return;
 
     requestInProgress = true;
-    setMessage("Loading settings...", "");
+    setMessage(settingsMessage, "Loading settings...", "");
+    withdrawalsToggle.disabled = true;
 
     try {
       const result = await apiRequest("GET");
@@ -157,10 +190,15 @@
         )
       );
 
-      setMessage("", "");
+      settingsLoaded = true;
+      withdrawalsToggle.disabled = false;
+
+      setMessage(settingsMessage, "", "");
+      setMessage(withdrawalMessage, "", "");
 
     } catch (error) {
-      setMessage(error.message, "error");
+      setMessage(settingsMessage, error.message, "error");
+      setMessage(withdrawalMessage, error.message, "error");
 
     } finally {
       requestInProgress = false;
@@ -170,23 +208,21 @@
   settingsForm.addEventListener("submit", async function (event) {
     event.preventDefault();
 
-    if (requestInProgress) return;
+    if (requestInProgress || !settingsLoaded) return;
 
     let settings;
 
     try {
       settings = collectSettings();
     } catch (error) {
-      setMessage(error.message, "error");
+      setMessage(settingsMessage, error.message, "error");
       return;
     }
 
     requestInProgress = true;
-
     settingsButton.disabled = true;
     settingsButton.textContent = "Saving...";
-
-    setMessage("", "");
+    setMessage(settingsMessage, "", "");
 
     try {
       const result = await apiRequest("POST", settings);
@@ -200,12 +236,13 @@
       );
 
       setMessage(
+        settingsMessage,
         "All settings saved successfully.",
         "success"
       );
 
     } catch (error) {
-      setMessage(error.message, "error");
+      setMessage(settingsMessage, error.message, "error");
 
     } finally {
       requestInProgress = false;
@@ -214,7 +251,67 @@
     }
   });
 
+  withdrawalsToggle.addEventListener("click", async function () {
+    if (requestInProgress || !settingsLoaded) return;
+
+    const previousValue = withdrawalsEnabled;
+    const nextValue = !previousValue;
+
+    let settings;
+
+    try {
+      settings = collectSettings();
+      settings.withdrawalsEnabled = nextValue;
+    } catch (error) {
+      setMessage(withdrawalMessage, error.message, "error");
+      return;
+    }
+
+    requestInProgress = true;
+    withdrawalsToggle.disabled = true;
+    setMessage(withdrawalMessage, "Saving withdrawal setting...", "");
+
+    try {
+      const result = await apiRequest("POST", settings);
+
+      const savedValue =
+        result.settings &&
+        typeof result.settings.withdrawalsEnabled === "boolean"
+          ? result.settings.withdrawalsEnabled
+          : nextValue;
+
+      updateWithdrawalControl(savedValue);
+
+      setMessage(
+        withdrawalMessage,
+        savedValue
+          ? "Withdrawals have been enabled."
+          : "Withdrawals have been disabled.",
+        "success"
+      );
+
+    } catch (error) {
+      updateWithdrawalControl(previousValue);
+      setMessage(withdrawalMessage, error.message, "error");
+
+    } finally {
+      requestInProgress = false;
+      withdrawalsToggle.disabled = false;
+    }
+  });
+
+  openWithdrawalsButton.addEventListener("click", function () {
+    platformScreen.hidden = true;
+    withdrawalsScreen.hidden = false;
+    window.scrollTo(0, 0);
+  });
+
+  backSettingsButton.addEventListener("click", function () {
+    withdrawalsScreen.hidden = true;
+    platformScreen.hidden = false;
+    window.scrollTo(0, 0);
+  });
+
   loadDashboard();
 
 })();
-
