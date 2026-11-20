@@ -5,8 +5,6 @@ const {
 } = require("../lib/github-storage");
 
 const SETTINGS_FILE = "data/admin-settings.json";
-const USERS_FILE = "data/users.json";
-const PAYMENTS_FILE = "data/payments.json";
 
 const DEFAULT_SETTINGS = {
   activationPrices: [5300, 9300],
@@ -16,17 +14,14 @@ const DEFAULT_SETTINGS = {
   videoReward: 1750
 };
 
+const ALLOWED_ORIGINS = new Set([
+  "https://api.tunevaweb.com.ng",
+  process.env.TUNEVA_ADMIN_ORIGIN,
+  process.env.TUNEVA_FRONTEND_ORIGIN
+].filter(Boolean));
+
 function send(res, status, data) {
   return res.status(status).json(data);
-}
-
-function getData(result, key) {
-  const data = result && result.data;
-
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.[key])) return data[key];
-
-  return [];
 }
 
 function validAmount(value, min, max) {
@@ -65,64 +60,19 @@ function validateSettings(body) {
   };
 }
 
-function findPaymentForUser(user, payments) {
-  const paymentId = String(
-    user.paymentId || user.paymentID || ""
-  );
-
-  const reference = String(
-    user.paymentReference || user.reference || ""
-  );
-
-  return payments.find(payment => {
-    if (
-      String(payment.status || "").toLowerCase() !== "approved" ||
-      payment.activation !== true
-    ) {
-      return false;
-    }
-
-    if (
-      paymentId &&
-      String(payment.id || "") === paymentId
-    ) {
-      return true;
-    }
-
-    if (
-      reference &&
-      String(payment.reference || "") === reference
-    ) {
-      return true;
-    }
-
-    return (
-      String(payment.username || "").toLowerCase() ===
-        String(user.username || "").toLowerCase() &&
-      String(payment.email || "").toLowerCase() ===
-        String(user.email || "").toLowerCase()
-    );
-  });
-}
-
 module.exports = async function handler(req, res) {
-  const allowedOrigin =
-    process.env.TUNEVA_ADMIN_ORIGIN ||
-    process.env.TUNEVA_FRONTEND_ORIGIN;
-
   const origin = req.headers.origin;
 
-  if (allowedOrigin && origin && origin !== allowedOrigin) {
+  if (origin && !ALLOWED_ORIGINS.has(origin)) {
     return send(res, 403, {
       ok: false,
       message: "Origin not allowed."
     });
   }
 
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    allowedOrigin || "*"
-  );
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
 
   res.setHeader("Vary", "Origin");
   res.setHeader(
@@ -150,45 +100,19 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      const [
-        settingsResult,
-        usersResult,
-        paymentsResult
-      ] = await Promise.all([
-        readJSON(SETTINGS_FILE, DEFAULT_SETTINGS),
-        readJSON(USERS_FILE, { users: [] }),
-        readJSON(PAYMENTS_FILE, { payments: [] })
-      ]);
+      const stored = await readJSON(
+        SETTINGS_FILE,
+        DEFAULT_SETTINGS
+      );
 
       const settings = {
         ...DEFAULT_SETTINGS,
-        ...(settingsResult.data || {})
+        ...(stored.data || {})
       };
-
-      const users = getData(usersResult, "users");
-      const payments = getData(paymentsResult, "payments");
-
-      const accounts = users
-        .filter(user =>
-          String(user.status || "").toLowerCase() === "active"
-        )
-        .map(user => {
-          const payment = findPaymentForUser(user, payments);
-
-          return {
-            email: user.email || "",
-            username: user.username || "",
-            status: user.status,
-            amountPaid: payment
-              ? Number(payment.amount || 0)
-              : null
-          };
-        });
 
       return send(res, 200, {
         ok: true,
-        settings,
-        accounts
+        settings
       });
     }
 
@@ -232,4 +156,3 @@ module.exports = async function handler(req, res) {
     });
   }
 };
-      
