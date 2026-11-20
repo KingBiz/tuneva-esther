@@ -1,3 +1,4 @@
+
 :root {
   --bg: #f7f6f3;
   --card: #ffffff;
@@ -5,7 +6,6 @@
   --muted: #85837e;
   --border: #eae8e3;
   --gold: #947a48;
-  --gold-light: #f5f0e5;
   --green: #218653;
   --red: #c74747;
 }
@@ -47,15 +47,10 @@ button {
   padding: 35px 18px 55px;
 }
 
-.ta-login {
+.ta-main {
   width: 100%;
-  max-width: 390px;
-  margin: 12vh auto 0;
-  padding: 30px 24px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: 0 8px 35px rgba(0, 0, 0, .035);
+  max-width: 850px;
+  margin: 0 auto;
 }
 
 .ta-brand {
@@ -72,88 +67,6 @@ button {
   margin-left: 4px;
 }
 
-.ta-login h1 {
-  margin: 32px 0 7px;
-  font-family: "Zalando Sans", sans-serif;
-  font-size: 25px;
-  font-weight: 700;
-}
-
-.ta-login > p,
-.ta-header p,
-.ta-section-heading p,
-.ta-card > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-#ta-login-form {
-  margin-top: 27px;
-}
-
-#tuneva-admin label {
-  display: block;
-  margin-bottom: 9px;
-  color: #55534e;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-#tuneva-admin input {
-  display: block;
-  width: 100%;
-  height: 46px;
-  padding: 0 13px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  outline: none;
-  background: #fff;
-  color: var(--text);
-  font-size: 14px;
-  transition: border-color .2s, box-shadow .2s;
-}
-
-#tuneva-admin input:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(148, 122, 72, .09);
-}
-
-#tuneva-admin input::placeholder {
-  color: #b5b2ac;
-}
-
-#ta-login-button,
-#ta-save-settings {
-  width: 100%;
-  min-height: 46px;
-  margin-top: 17px;
-  border: 0;
-  border-radius: 9px;
-  background: #242321;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  transition: opacity .2s, transform .2s;
-}
-
-#ta-login-button:active,
-#ta-save-settings:active {
-  transform: scale(.99);
-}
-
-#tuneva-admin button:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-}
-
-.ta-main {
-  width: 100%;
-  max-width: 850px;
-  margin: 0 auto;
-}
-
 .ta-header {
   display: flex;
   align-items: center;
@@ -164,25 +77,17 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
+.ta-header p,
+.ta-section-heading p,
+.ta-card > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .ta-header p {
   margin-top: 5px;
-}
-
-.ta-logout,
-.ta-refresh {
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  color: #55534e;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ta-logout:active,
-.ta-refresh:active {
-  background: var(--gold-light);
 }
 
 .ta-section {
@@ -231,8 +136,57 @@ button {
   margin-top: 0;
 }
 
-#ta-settings-form > #ta-save-settings {
-  margin-top: 7px;
+#tuneva-admin label {
+  display: block;
+  margin-bottom: 9px;
+  color: #55534e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#tuneva-admin input {
+  display: block;
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+#tuneva-admin input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(148, 122, 72, .09);
+}
+
+#tuneva-admin input::placeholder {
+  color: #b5b2ac;
+}
+
+#ta-save-settings {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 17px;
+  border: 0;
+  border-radius: 9px;
+  background: #242321;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  transition: opacity .2s, transform .2s;
+}
+
+#ta-save-settings:active {
+  transform: scale(.99);
+}
+
+#tuneva-admin button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 .ta-message {
@@ -249,100 +203,6 @@ button {
 
 .ta-message.error {
   color: var(--red);
-}
-
-.ta-account-count {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  padding: 15px 17px;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: var(--gold-light);
-}
-
-.ta-account-count span {
-  color: #71664f;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ta-account-count strong {
-  color: #6d5730;
-  font-family: "Zalando Sans", sans-serif;
-  font-size: 21px;
-}
-
-#ta-accounts-list {
-  display: grid;
-  gap: 9px;
-}
-
-.ta-account {
-  padding: 15px;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: var(--card);
-}
-
-.ta-account-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.ta-account-name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ta-account-email {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
-
-.ta-account-status {
-  flex-shrink: 0;
-  padding: 5px 8px;
-  border-radius: 20px;
-  background: #eaf5ee;
-  color: var(--green);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.ta-account-bottom {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 11px;
-  border-top: 1px solid #f0efec;
-}
-
-.ta-account-bottom span {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.ta-account-bottom strong {
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.ta-empty {
-  padding: 28px 15px;
-  border: 1px dashed #dedbd4;
-  border-radius: 11px;
-  color: var(--muted);
-  text-align: center;
-  font-size: 11px;
 }
 
 .ta-footer {
