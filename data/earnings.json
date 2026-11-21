@@ -127009,21 +127009,69 @@
       "lastTapAt": 0
     },
     "USER-07a920342d41668e477dd796": {
-      "balance": 1750,
+      "balance": 7200,
       "todayDate": "2026-11-21",
-      "todayEarnings": 1750,
-      "tapPoints": 0,
-      "tapCount": 0,
-      "tapDailyPoints": 0,
-      "tapDailyEarnings": 0,
-      "videoEarnings": 1750,
+      "todayEarnings": 7200,
+      "tapPoints": 700,
+      "tapCount": 2,
+      "tapDailyPoints": 700,
+      "tapDailyEarnings": 200,
+      "videoEarnings": 7000,
       "claimedVideos": [
-        "seyi-vibes"
+        "seyi-vibes",
+        "bigger-fun",
+        "bigger-joyrides",
+        "bigger-escapes"
       ],
       "processedEvents": [
-        "644501eb-1b08-4242-9ef9-b619b8c9a183"
+        "644501eb-1b08-4242-9ef9-b619b8c9a183",
+        "ced8df93-2aec-457c-8dfd-59fcb2770da2",
+        "7336a6df-995a-4f4c-96e9-d56163ac9dd9",
+        "ecd05d56-3d70-4278-993a-df8c625fc7da",
+        "eb1dfb22-cb55-46fb-b7ef-e2c8b3db6678",
+        "a4575529-e0d8-424a-8f0f-65b93a575ff7"
       ],
       "history": [
+        {
+          "id": "a4575529-e0d8-424a-8f0f-65b93a575ff7",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-21T14:50:02.067Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "eb1dfb22-cb55-46fb-b7ef-e2c8b3db6678",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-21T14:50:02.067Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "ecd05d56-3d70-4278-993a-df8c625fc7da",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Escapes",
+          "amount": 1750,
+          "date": "2026-11-21T14:50:02.067Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "7336a6df-995a-4f4c-96e9-d56163ac9dd9",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Joyrides",
+          "amount": 1750,
+          "date": "2026-11-21T14:50:02.067Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "ced8df93-2aec-457c-8dfd-59fcb2770da2",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Fun",
+          "amount": 1750,
+          "date": "2026-11-21T14:50:02.067Z",
+          "currency": "NGN"
+        },
         {
           "id": "644501eb-1b08-4242-9ef9-b619b8c9a183",
           "title": "Video Rewards",
