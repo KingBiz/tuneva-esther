@@ -36,16 +36,18 @@
       "method": "paga",
       "provider": "movantra",
       "reference": "tv_1795264761657_e0f02723ee",
-      "status": "pending",
+      "status": "approved",
       "statusTokenHash": "12816bcd2b9d7943733b1042bd3939bf58ec54f3d2f96e7b83c31683b4ae58fd",
       "createdAt": "2026-11-21T12:39:22.817Z",
-      "processedAt": null,
+      "processedAt": "2026-11-21T12:42:54.690Z",
       "activation": true,
       "activationExpiresAt": "2026-11-21T13:29:22+00:00",
-      "pofPass": null,
-      "pofGeneratedAt": null,
+      "pofPass": "CH13UKTU42SA",
+      "pofGeneratedAt": "2026-11-21T12:42:54.690Z",
       "pofUsed": false,
-      "pofUsedAt": null
+      "pofUsedAt": null,
+      "approvalSource": "movantra_webhook",
+      "movantraWebhookProcessed": true
     },
     {
       "id": "PAY-TUNEVA-2fed447ac949aa0c1c80a514",
