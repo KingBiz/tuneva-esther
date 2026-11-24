@@ -403453,23 +403453,61 @@
       "lastTapAt": 0
     },
     "USER-d3f2cf0674ee61342765e6db": {
-      "balance": 3500,
+      "balance": 7200,
       "todayDate": "2026-11-24",
-      "todayEarnings": 3500,
-      "tapPoints": 0,
-      "tapCount": 0,
-      "tapDailyPoints": 0,
-      "tapDailyEarnings": 0,
-      "videoEarnings": 3500,
+      "todayEarnings": 7200,
+      "tapPoints": 700,
+      "tapCount": 2,
+      "tapDailyPoints": 700,
+      "tapDailyEarnings": 200,
+      "videoEarnings": 7000,
       "claimedVideos": [
         "seyi-vibes",
-        "bigger-escapes"
+        "bigger-escapes",
+        "bigger-fun",
+        "bigger-joyrides"
       ],
       "processedEvents": [
         "f250c208-ce62-47d7-98df-974d2f86780b",
-        "b27470e9-b236-4014-996b-7aa922324807"
+        "b27470e9-b236-4014-996b-7aa922324807",
+        "7191679f-8ffe-47f5-ac3e-1911e45661e5",
+        "b8c712ae-ebac-4b6f-8162-d953cc662178",
+        "893fc2da-a8de-44e3-bb48-4c854715c17b",
+        "5301f969-4aab-44ca-9191-4d055dfccd10"
       ],
       "history": [
+        {
+          "id": "5301f969-4aab-44ca-9191-4d055dfccd10",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-24T16:09:46.745Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "893fc2da-a8de-44e3-bb48-4c854715c17b",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-24T16:09:46.745Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "b8c712ae-ebac-4b6f-8162-d953cc662178",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Joyrides",
+          "amount": 1750,
+          "date": "2026-11-24T16:09:46.745Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "7191679f-8ffe-47f5-ac3e-1911e45661e5",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Fun",
+          "amount": 1750,
+          "date": "2026-11-24T16:09:46.745Z",
+          "currency": "NGN"
+        },
         {
           "id": "b27470e9-b236-4014-996b-7aa922324807",
           "title": "Video Rewards",
