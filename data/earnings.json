@@ -487784,17 +487784,19 @@
       "lastTapAt": 0
     },
     "USER-d0e7c0e5811ca7574cc2ac7f": {
-      "balance": 6500,
+      "balance": 10000,
       "todayDate": "2026-11-25",
-      "todayEarnings": 6500,
+      "todayEarnings": 10000,
       "tapPoints": 10500,
       "tapCount": 30,
       "tapDailyPoints": 10500,
       "tapDailyEarnings": 3000,
-      "videoEarnings": 3500,
+      "videoEarnings": 7000,
       "claimedVideos": [
         "seyi-vibes",
-        "bigger-escapes"
+        "bigger-escapes",
+        "bigger-joyrides",
+        "bigger-fun"
       ],
       "processedEvents": [
         "86ebe463-4e21-4211-87ec-aef324080282",
@@ -487828,9 +487830,27 @@
         "1470dbdb-a17e-4307-bec1-ce7093eed1db",
         "549fdf42-c8b0-4bb8-bc2f-ee80ad393f39",
         "15e5889d-32db-45d6-b776-8171697e9dd3",
-        "7ff66abd-6835-4707-8297-55ed8f1c5a5c"
+        "7ff66abd-6835-4707-8297-55ed8f1c5a5c",
+        "690e2161-bf41-4658-8786-b59917415dbb",
+        "4d531f8b-8e88-4e83-8373-ca925c2c95a7"
       ],
       "history": [
+        {
+          "id": "4d531f8b-8e88-4e83-8373-ca925c2c95a7",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Fun",
+          "amount": 1750,
+          "date": "2026-11-25T22:11:06.101Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "690e2161-bf41-4658-8786-b59917415dbb",
+          "title": "Video Rewards",
+          "subtitle": "For Bigger Joyrides",
+          "amount": 1750,
+          "date": "2026-11-25T22:11:06.101Z",
+          "currency": "NGN"
+        },
         {
           "id": "7ff66abd-6835-4707-8297-55ed8f1c5a5c",
           "title": "Tap Rewards",
