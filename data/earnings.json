@@ -479789,6 +479789,40 @@
         }
       ],
       "lastTapAt": 0
+    },
+    "USER-291af2c8000cdd4e2a7507e4": {
+      "balance": 200,
+      "todayDate": "2026-11-25",
+      "todayEarnings": 200,
+      "tapPoints": 700,
+      "tapCount": 2,
+      "tapDailyPoints": 700,
+      "tapDailyEarnings": 200,
+      "videoEarnings": 0,
+      "claimedVideos": [],
+      "processedEvents": [
+        "e5d8ecf2-b20f-4310-acbe-80146565022c",
+        "b21dcf77-5928-4f7a-b921-a41540affa0b"
+      ],
+      "history": [
+        {
+          "id": "b21dcf77-5928-4f7a-b921-a41540affa0b",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-25T17:13:02.829Z",
+          "currency": "NGN"
+        },
+        {
+          "id": "e5d8ecf2-b20f-4310-acbe-80146565022c",
+          "title": "Tap Rewards",
+          "subtitle": "Tap Tap",
+          "amount": 100,
+          "date": "2026-11-25T17:13:02.829Z",
+          "currency": "NGN"
+        }
+      ],
+      "lastTapAt": 0
     }
   }
 }
